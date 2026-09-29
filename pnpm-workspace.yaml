@@ -1,0 +1,15 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  '@prisma/engines': true
+  '@scarf/scarf': false
+  '@swc/core': true
+  esbuild: true
+  prisma: true
+  protobufjs: true
+
+minimumReleaseAgeExclude:
+  - '@nestjs/swagger@11.4.7'
+  - '@types/pg@8.23.1'

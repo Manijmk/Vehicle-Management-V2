@@ -1,0 +1,153 @@
+name: vehicle-management
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vehicle_management}
+      POSTGRES_USER: ${POSTGRES_USER:-vehicle_management}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_vehicle_management}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-vehicle_management}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local_vehicle_management_secret}
+    ports:
+      - '${MINIO_API_PORT:-9000}:9000'
+      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      - minio
+    entrypoint: >-
+      /bin/sh -c "
+      until mc alias set local http://minio:9000
+      $${MINIO_ROOT_USER:-vehicle_management}
+      $${MINIO_ROOT_PASSWORD:-local_vehicle_management_secret}; do sleep 2; done;
+      mc mb --ignore-existing local/$${S3_BUCKET:-vehicle-management};
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-vehicle_management}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local_vehicle_management_secret}
+      S3_BUCKET: ${S3_BUCKET:-vehicle-management}
+    restart: 'no'
+
+  api:
+    profiles: ['applications']
+    build:
+      context: .
+      target: api
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      API_CORS_ORIGINS: http://localhost:3000
+      AUTH_PROVIDER: local
+      AUTH_ISSUER: vehicle-management-local
+      AUTH_AUDIENCE: vehicle-management-api
+      AUTH_LOCAL_SIGNING_KEY: ${AUTH_LOCAL_SIGNING_KEY:-local-only-signing-key-change-before-use-0001}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vehicle_management}:${POSTGRES_PASSWORD:-local_vehicle_management}@postgres:5432/${POSTGRES_DB:-vehicle_management}?schema=public
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: ${S3_BUCKET:-vehicle-management}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-vehicle_management}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-local_vehicle_management_secret}
+      S3_FORCE_PATH_STYLE: 'true'
+      OTEL_ENABLED: 'false'
+    ports:
+      - '${API_PORT:-3001}:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    profiles: ['applications']
+    build:
+      context: .
+      target: web
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3001/api/v1
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+
+  worker:
+    profiles: ['applications']
+    build:
+      context: .
+      target: worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vehicle_management}:${POSTGRES_PASSWORD:-local_vehicle_management}@postgres:5432/${POSTGRES_DB:-vehicle_management}?schema=public
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: ${S3_BUCKET:-vehicle-management}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-vehicle_management}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-local_vehicle_management_secret}
+      S3_FORCE_PATH_STYLE: 'true'
+      OTEL_ENABLED: 'false'
+      OUTBOX_POLL_INTERVAL_MS: 1000
+      OUTBOX_BATCH_SIZE: 20
+      OUTBOX_LOCK_TIMEOUT_MS: 60000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

@@ -1,0 +1,31 @@
+{
+  "name": "@vms/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@nestjs/common": "11.2.1",
+    "@nestjs/core": "11.2.1",
+    "@vms/config": "workspace:*",
+    "@vms/database": "workspace:*",
+    "@vms/observability": "workspace:*",
+    "dotenv": "17.4.2",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "11.2.1",
+    "@vitest/coverage-v8": "4.1.10",
+    "tsx": "4.23.1",
+    "vitest": "4.1.10"
+  }
+}

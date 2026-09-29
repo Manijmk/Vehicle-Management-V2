@@ -1,0 +1,6 @@
+export const API_CONFIG = Symbol('API_CONFIG');
+export const DATABASE = Symbol('DATABASE');
+export const AUTHENTICATION_PORT = Symbol('AUTHENTICATION_PORT');
+export const FOUNDATION_REPOSITORY = Symbol('FOUNDATION_REPOSITORY');
+export const VEHICLE_REPOSITORY = Symbol('VEHICLE_REPOSITORY');
+export const DRIVER_REPOSITORY = Symbol('DRIVER_REPOSITORY');
