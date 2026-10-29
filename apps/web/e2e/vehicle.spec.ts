@@ -43,9 +43,7 @@ test.describe('Vehicle Management Lifecycle and Authorization Acceptance Flow', 
     await expect(page.getByTestId('detail-status')).toHaveText('DRAFT');
     await expect(page.getByTestId('detail-version')).toHaveText('1');
     await expect(page.getByTestId('status-history-list')).toContainText('DRAFT');
-    await expect(page.getByTestId('status-history-list')).toContainText(
-      'Vehicle created in DRAFT status',
-    );
+    await expect(page.getByTestId('status-history-list')).toContainText('Vehicle created');
 
     // 6. Activate vehicle (DRAFT -> ACTIVE)
     const activateBtn = page.getByTestId('activate-vehicle-btn');

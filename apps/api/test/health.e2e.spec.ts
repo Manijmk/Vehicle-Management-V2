@@ -14,7 +14,7 @@ describe('health endpoint', () => {
       NODE_ENV: 'test',
       DATABASE_URL:
         process.env.DATABASE_URL ??
-        'postgresql://vehicle_management:local_vehicle_management@localhost:55432/vehicle_management?schema=public',
+        'postgresql://vehicle_management:local_vehicle_management@localhost:5432/vehicle_management?schema=public',
       REDIS_URL: 'redis://localhost:6379',
       S3_ENDPOINT: 'http://localhost:9000',
       S3_REGION: 'us-east-1',

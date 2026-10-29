@@ -25,6 +25,23 @@ export const permissionCodes = [
   'assignment.read',
   'assignment.create',
   'assignment.end',
+  'trip.read',
+  'trip.create',
+  'trip.update',
+  'trip.ready',
+  'trip.start',
+  'trip.complete',
+  'trip.cancel',
+  'trip.abort',
+  'trip.history.read',
+  'inspection.read',
+  'inspection.create',
+  'inspection.perform',
+  'inspection.complete',
+  'inspection.cancel',
+  'inspection.history.read',
+  'inspection.template.read',
+  'inspection.template.manage',
 ] as const;
 
 export type PermissionCode = (typeof permissionCodes)[number];

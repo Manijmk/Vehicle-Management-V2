@@ -5,11 +5,15 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { TenantHeader } from '../../../components/tenant-header';
 import {
+  api,
   ApiClientError,
   assignmentApi,
+  tripApi,
   vehicleApi,
   type CurrentUserResponse,
   type FuelType,
+  type InspectionRecord,
+  type TripRecord,
   type VehicleDriverAssignmentRecord,
   type VehicleRecord,
   type VehicleStatusHistoryEntry,
@@ -26,6 +30,9 @@ export default function VehicleDetailPage() {
     null,
   );
   const [assignmentHistory, setAssignmentHistory] = useState<VehicleDriverAssignmentRecord[]>([]);
+  const [currentTrip, setCurrentTrip] = useState<TripRecord | null>(null);
+  const [tripHistory, setTripHistory] = useState<TripRecord[]>([]);
+  const [inspections, setInspections] = useState<InspectionRecord[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,18 +63,30 @@ export default function VehicleDetailPage() {
       setLoading(true);
       setError(null);
       setConflictMessage(null);
-      const [v, h, u, curAsn, asnH] = await Promise.all([
+      const [v, h, u, curAsn, asnH, curTrip, tripH, inspRes] = await Promise.all([
         vehicleApi.fetchVehicle(vehicleId),
         vehicleApi.fetchStatusHistory(vehicleId),
         vehicleApi.fetchCurrentUser().catch(() => null),
         assignmentApi.fetchVehicleCurrentAssignment(vehicleId).catch(() => null),
         assignmentApi.fetchVehicleAssignmentHistory(vehicleId).catch(() => []),
+        tripApi.fetchVehicleCurrentTrip(vehicleId).catch(() => null),
+        tripApi
+          .fetchVehicleTripHistory(vehicleId, 20)
+          .then((res) => res.items)
+          .catch(() => []),
+        api
+          .fetchVehicleInspections(vehicleId, 20)
+          .then((res) => res.items)
+          .catch(() => []),
       ]);
       setVehicle(v);
       setHistory(h);
       setCurrentUser(u);
       setCurrentAssignment(curAsn);
       setAssignmentHistory(asnH);
+      setCurrentTrip(curTrip);
+      setTripHistory(tripH);
+      setInspections(inspRes);
       setEditData({
         model: v.model,
         year: v.year,
@@ -671,6 +690,204 @@ export default function VehicleDetailPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section
+        className="panel"
+        style={{ marginTop: '1.5rem' }}
+        data-testid="vehicle-current-trip-section"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>Current In-Progress Trip</h2>
+          {!currentTrip && currentAssignment && permissions.includes('trip.create') ? (
+            <Link
+              href={`/trips/new?assignmentId=${currentAssignment.id}`}
+              className="primary-action compact-btn"
+              data-testid="plan-trip-link"
+            >
+              Plan new trip
+            </Link>
+          ) : null}
+        </div>
+        {currentTrip ? (
+          <div style={{ marginTop: '1rem' }} data-testid="current-trip-card">
+            <dl>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '160px 1fr',
+                  gap: '0.6rem',
+                  paddingBottom: '0.5rem',
+                  borderBottom: '1px solid var(--line)',
+                }}
+              >
+                <dt style={{ color: 'var(--muted)', fontWeight: 700 }}>Trip ID</dt>
+                <dd style={{ margin: 0 }}>
+                  <Link href={`/trips/${currentTrip.id}`} className="table-link">
+                    <strong data-testid="current-trip-display-id">{currentTrip.displayId}</strong>
+                  </Link>
+                </dd>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '160px 1fr',
+                  gap: '0.6rem',
+                  paddingBottom: '0.5rem',
+                  borderBottom: '1px solid var(--line)',
+                }}
+              >
+                <dt style={{ color: 'var(--muted)', fontWeight: 700 }}>Route</dt>
+                <dd style={{ margin: 0 }} data-testid="current-trip-route">
+                  <strong>{currentTrip.origin}</strong> &rarr; {currentTrip.destination}
+                </dd>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '160px 1fr',
+                  gap: '0.6rem',
+                  paddingBottom: '0.5rem',
+                  borderBottom: '1px solid var(--line)',
+                }}
+              >
+                <dt style={{ color: 'var(--muted)', fontWeight: 700 }}>Status</dt>
+                <dd style={{ margin: 0 }}>
+                  <span className="status-pill active" data-testid="current-trip-status">
+                    {currentTrip.status}
+                  </span>
+                </dd>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '160px 1fr',
+                  gap: '0.6rem',
+                  paddingBottom: '0.5rem',
+                }}
+              >
+                <dt style={{ color: 'var(--muted)', fontWeight: 700 }}>Start Odometer</dt>
+                <dd style={{ margin: 0 }} data-testid="current-trip-start-odo">
+                  {currentTrip.startOdometerKm} km
+                </dd>
+              </div>
+            </dl>
+          </div>
+        ) : (
+          <p
+            style={{ marginTop: '0.75rem', color: 'var(--muted)' }}
+            data-testid="no-active-trip-text"
+          >
+            No active in-progress trip for this vehicle.
+          </p>
+        )}
+      </section>
+
+      <section
+        className="panel"
+        style={{ marginTop: '1.5rem' }}
+        data-testid="vehicle-trip-history-section"
+      >
+        <h2>Trip History</h2>
+        {tripHistory.length === 0 ? (
+          <p style={{ marginTop: '0.75rem', color: 'var(--muted)' }}>
+            No trips recorded for this vehicle.
+          </p>
+        ) : (
+          <ul
+            className="history-list"
+            style={{ marginTop: '1rem' }}
+            data-testid="trip-history-list"
+          >
+            {tripHistory.map((item) => (
+              <li key={item.id} data-testid={`trip-history-item-${item.id}`}>
+                <strong>
+                  <Link href={`/trips/${item.id}`} className="table-link">
+                    {item.displayId}
+                  </Link>{' '}
+                  &bull; {item.origin} &rarr; {item.destination} ({item.status})
+                </strong>
+                <span className="history-meta">
+                  {item.distanceKm !== null && item.distanceKm !== undefined
+                    ? `${item.distanceKm} km travelled`
+                    : item.startOdometerKm !== null
+                      ? `Started at ${item.startOdometerKm} km`
+                      : 'Planned'}{' '}
+                  &bull; {new Date(item.createdAt).toLocaleDateString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section
+        className="panel"
+        style={{ marginTop: '1.5rem' }}
+        data-testid="vehicle-inspection-history-section"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>Inspection History</h2>
+          <Link
+            href={`/inspections/new?vehicleId=${vehicle.id}`}
+            className="secondary-action"
+            data-testid="add-vehicle-inspection-btn"
+            style={{ textDecoration: 'none', fontSize: '0.875rem' }}
+          >
+            + New Inspection
+          </Link>
+        </div>
+        {inspections.length === 0 ? (
+          <p style={{ marginTop: '0.75rem', color: 'var(--muted)' }}>
+            No inspections recorded for this vehicle.
+          </p>
+        ) : (
+          <table
+            className="data-table"
+            data-testid="vehicle-inspections-table"
+            style={{ marginTop: '1rem', width: '100%' }}
+          >
+            <thead>
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Type</th>
+                <th scope="col">Template</th>
+                <th scope="col">Status</th>
+                <th scope="col">Result</th>
+                <th scope="col">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inspections.map((item) => (
+                <tr key={item.id} data-testid={`vehicle-inspection-row-${item.id}`}>
+                  <td>
+                    <Link href={`/inspections/${item.id}`} className="table-link">
+                      {item.displayId}
+                    </Link>
+                  </td>
+                  <td>{item.type}</td>
+                  <td>{item.template?.name ?? '—'}</td>
+                  <td>{item.status}</td>
+                  <td>
+                    {item.result ? (
+                      <span
+                        style={{
+                          fontWeight: 600,
+                          color: item.result === 'PASS' ? '#166534' : '#991b1b',
+                        }}
+                      >
+                        {item.result}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td>{new Date(item.createdAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </section>
     </main>

@@ -246,6 +246,20 @@ export class PrismaVehicleRepository implements VehicleRepository {
       if (before === null) throw new ApplicationError('VEHICLE_NOT_FOUND', 'Vehicle was not found');
       assertVehicleTransition(before.status, 'RETIRED');
 
+      const activeAssignment = await tx.vehicleDriverAssignment.findFirst({
+        where: {
+          vehicleId: input.vehicleId,
+          organizationId: input.organizationId,
+          status: 'ACTIVE',
+        },
+      });
+      if (activeAssignment !== null) {
+        throw new ApplicationError(
+          'VEHICLE_HAS_ACTIVE_ASSIGNMENT',
+          'Cannot retire vehicle while it has an active driver assignment',
+        );
+      }
+
       const result = await tx.vehicle.updateMany({
         where: {
           id: input.vehicleId,

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   getStoredAuthToken,
@@ -66,16 +67,62 @@ export function TenantHeader({ onAuthChange }: { onAuthChange?: () => void }) {
         <span className="tenant-badge" data-testid="tenant-badge">
           Tenant: Development Fleet ({getStoredOrganizationId().slice(0, 8)}...)
         </span>
-        {currentUser ? (
-          <span className="user-badge" data-testid="user-badge">
-            User: {currentUser.user.displayName} ({currentUser.user.email})
-          </span>
-        ) : loading ? (
-          <span className="user-badge">Connecting to API...</span>
-        ) : (
-          <span className="user-badge error">Unauthenticated</span>
-        )}
+        <span
+          className={`user-badge ${!currentUser && !loading ? 'error' : ''}`}
+          data-testid="user-badge"
+        >
+          {currentUser
+            ? `User: ${currentUser.user.displayName} (${currentUser.user.email})`
+            : loading
+              ? 'Connecting to API...'
+              : 'Unauthenticated'}
+        </span>
       </div>
+
+      <nav className="tenant-nav" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <Link
+          href="/vehicles"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-vehicles"
+        >
+          Vehicles
+        </Link>
+        <Link
+          href="/drivers"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-drivers"
+        >
+          Drivers
+        </Link>
+        <Link
+          href="/assignments"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-assignments"
+        >
+          Assignments
+        </Link>
+        <Link
+          href="/trips"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-trips"
+        >
+          Trips
+        </Link>
+        <Link
+          href="/inspections"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-inspections"
+        >
+          Inspections
+        </Link>
+        <Link
+          href="/inspection-templates"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-inspection-templates"
+        >
+          Templates
+        </Link>
+      </nav>
 
       <div className="auth-actions">
         <button

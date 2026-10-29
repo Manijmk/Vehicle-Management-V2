@@ -7,8 +7,10 @@ import { TenantHeader } from '../../../components/tenant-header';
 import {
   ApiClientError,
   assignmentApi,
+  tripApi,
   vehicleApi,
   type CurrentUserResponse,
+  type TripRecord,
   type VehicleDriverAssignmentRecord,
 } from '../../../lib/api-client';
 
@@ -17,6 +19,7 @@ export default function AssignmentDetailPage() {
   const assignmentId = params['assignmentId'] as string;
 
   const [assignment, setAssignment] = useState<VehicleDriverAssignmentRecord | null>(null);
+  const [assignmentTrips, setAssignmentTrips] = useState<TripRecord[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,12 +37,17 @@ export default function AssignmentDetailPage() {
       setLoading(true);
       setError(null);
       setConflictMessage(null);
-      const [asn, user] = await Promise.all([
+      const [asn, user, trips] = await Promise.all([
         assignmentApi.fetchAssignment(assignmentId),
         vehicleApi.fetchCurrentUser().catch(() => null),
+        tripApi
+          .fetchAssignmentTripHistory(assignmentId, 20)
+          .then((res) => res.items)
+          .catch(() => []),
       ]);
       setAssignment(asn);
       setCurrentUser(user);
+      setAssignmentTrips(trips);
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 404) {
         setError('Assignment was not found in this organization.');
@@ -84,6 +92,8 @@ export default function AssignmentDetailPage() {
         );
         setIsEnding(false);
         await loadData();
+      } else if (err instanceof ApiClientError && err.code === 'ASSIGNMENT_HAS_ACTIVE_TRIP') {
+        setEndError('Cannot end assignment while a non-terminal trip exists.');
       } else {
         setEndError(err instanceof Error ? err.message : 'Failed to end assignment');
       }
@@ -118,6 +128,10 @@ export default function AssignmentDetailPage() {
   const isEligible =
     assignment.driver?.eligible ?? assignment.driver?.isOperationallyEligible ?? false;
 
+  const hasActiveTrip = assignmentTrips.some((t) =>
+    ['DRAFT', 'READY', 'IN_PROGRESS'].includes(t.status),
+  );
+
   return (
     <main className="vehicle-page narrow">
       <TenantHeader onAuthChange={() => void loadData()} />
@@ -147,6 +161,17 @@ export default function AssignmentDetailPage() {
           ) : null}
         </div>
       </div>
+
+      {hasActiveTrip ? (
+        <div
+          className="action-error"
+          style={{ background: '#fef3c7', borderColor: '#f59e0b', color: '#92400e' }}
+          data-testid="active-trip-warning"
+        >
+          Notice: This assignment has active or planned trips. Ending this assignment is blocked
+          until all trips reach a terminal status (COMPLETED, CANCELLED, ABORTED).
+        </div>
+      ) : null}
 
       {conflictMessage ? (
         <div className="action-error" data-testid="conflict-banner">
@@ -245,6 +270,55 @@ export default function AssignmentDetailPage() {
             </span>
           </div>
         </div>
+      </section>
+
+      <section
+        className="panel"
+        style={{ marginTop: '1.5rem', padding: '1.25rem' }}
+        data-testid="assignment-trips-section"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>Trips on this Assignment</h2>
+          {assignment.status === 'ACTIVE' && permissions.includes('trip.create') ? (
+            <Link
+              href={`/trips/new?assignmentId=${assignment.id}`}
+              className="primary-action compact-btn"
+              data-testid="plan-trip-link"
+            >
+              Plan new trip
+            </Link>
+          ) : null}
+        </div>
+        {assignmentTrips.length === 0 ? (
+          <p style={{ marginTop: '0.75rem', color: 'var(--muted)' }}>
+            No trips have been conducted under this assignment yet.
+          </p>
+        ) : (
+          <ul
+            className="history-list"
+            style={{ marginTop: '1rem' }}
+            data-testid="assignment-trips-list"
+          >
+            {assignmentTrips.map((item) => (
+              <li key={item.id} data-testid={`assignment-trip-item-${item.id}`}>
+                <strong>
+                  <Link href={`/trips/${item.id}`} className="table-link">
+                    {item.displayId}
+                  </Link>{' '}
+                  &bull; {item.origin} &rarr; {item.destination} ({item.status})
+                </strong>
+                <span className="history-meta">
+                  {item.distanceKm !== null && item.distanceKm !== undefined
+                    ? `${item.distanceKm} km travelled`
+                    : item.startOdometerKm !== null
+                      ? `Started at ${item.startOdometerKm} km`
+                      : 'Planned'}{' '}
+                  &bull; {new Date(item.createdAt).toLocaleDateString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* End Assignment Modal */}

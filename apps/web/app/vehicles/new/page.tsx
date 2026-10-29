@@ -293,7 +293,7 @@ export default function NewVehiclePage() {
               type="submit"
               className="primary-action"
               disabled={submitting}
-              data-testid="submit-vehicle-btn"
+              data-testid="submit-vehicle"
             >
               {submitting ? 'Saving vehicle...' : 'Save vehicle'}
             </button>

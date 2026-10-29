@@ -11,7 +11,7 @@ const organizationId = '12000000-0000-4000-8000-000000000001';
 const eventId = '72000000-0000-4000-8000-000000000001';
 const databaseUrl =
   process.env.DATABASE_URL ??
-  'postgresql://vehicle_management:local_vehicle_management@localhost:55432/vehicle_management?schema=public';
+  'postgresql://vehicle_management:local_vehicle_management@localhost:5432/vehicle_management?schema=public';
 const config = {
   OUTBOX_BATCH_SIZE: 20,
   OUTBOX_LOCK_TIMEOUT_MS: 60_000,
@@ -33,7 +33,11 @@ describe('persisted outbox publication', () => {
 
   afterAll(async () => {
     await database.outboxEvent.deleteMany({ where: { organizationId } });
-    await database.organization.delete({ where: { id: organizationId } });
+    try {
+      await database.organization.delete({ where: { id: organizationId } });
+    } catch {
+      // Ignore if organization has foreign key references from other test suites
+    }
     await database.$disconnect();
   });
 
@@ -179,6 +183,132 @@ describe('persisted outbox publication', () => {
     const processed = await processor.processBatch();
     expect(processed).toBe(5);
     for (const evt of driverEvents) {
+      expect(publisher.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ id: evt.id, eventType: evt.eventType, attempts: 1 }),
+      );
+      const row = await database.outboxEvent.findUnique({ where: { id: evt.id } });
+      expect(row?.status).toBe('PUBLISHED');
+    }
+  });
+
+  it('claims and publishes assignment lifecycle events (VehicleDriverAssigned, VehicleDriverUnassigned)', async () => {
+    const assignmentEvents = [
+      {
+        id: '72000000-0000-4000-8000-000000000030',
+        eventType: 'VehicleDriverAssigned',
+        aggregateType: 'VehicleDriverAssignment',
+      },
+      {
+        id: '72000000-0000-4000-8000-000000000031',
+        eventType: 'VehicleDriverUnassigned',
+        aggregateType: 'VehicleDriverAssignment',
+      },
+    ];
+    for (const evt of assignmentEvents) {
+      await database.outboxEvent.create({
+        data: {
+          id: evt.id,
+          organizationId,
+          eventType: evt.eventType,
+          aggregateType: evt.aggregateType,
+          aggregateId: '90000000-0000-4000-8000-000000000001',
+          payload: { eventId: evt.id, eventType: evt.eventType },
+          occurredAt: new Date(),
+        },
+      });
+    }
+
+    const store = new PrismaOutboxStore(database);
+    const publisher = {
+      publish: vi.fn().mockResolvedValue(undefined),
+    } as IntegrationEventPublisher;
+    const processor = new OutboxProcessorService(store, publisher, config);
+
+    const processed = await processor.processBatch();
+    expect(processed).toBe(2);
+    for (const evt of assignmentEvents) {
+      expect(publisher.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ id: evt.id, eventType: evt.eventType, attempts: 1 }),
+      );
+      const row = await database.outboxEvent.findUnique({ where: { id: evt.id } });
+      expect(row?.status).toBe('PUBLISHED');
+    }
+  });
+
+  it('claims and publishes trip lifecycle events (TripCreated, TripReady, TripStarted, TripCompleted, TripCancelled, TripAborted)', async () => {
+    const tripEvents = [
+      { id: '72000000-0000-4000-8000-000000000040', eventType: 'TripCreated' },
+      { id: '72000000-0000-4000-8000-000000000041', eventType: 'TripReady' },
+      { id: '72000000-0000-4000-8000-000000000042', eventType: 'TripStarted' },
+      { id: '72000000-0000-4000-8000-000000000043', eventType: 'TripCompleted' },
+      { id: '72000000-0000-4000-8000-000000000044', eventType: 'TripCancelled' },
+      { id: '72000000-0000-4000-8000-000000000045', eventType: 'TripAborted' },
+    ];
+    for (const evt of tripEvents) {
+      await database.outboxEvent.create({
+        data: {
+          id: evt.id,
+          organizationId,
+          eventType: evt.eventType,
+          aggregateType: 'Trip',
+          aggregateId: '91000000-0000-4000-8000-000000000001',
+          payload: { eventId: evt.id, eventType: evt.eventType },
+          occurredAt: new Date(),
+        },
+      });
+    }
+
+    const store = new PrismaOutboxStore(database);
+    const publisher = {
+      publish: vi.fn().mockResolvedValue(undefined),
+    } as IntegrationEventPublisher;
+    const processor = new OutboxProcessorService(store, publisher, config);
+
+    const processed = await processor.processBatch();
+    expect(processed).toBe(6);
+    for (const evt of tripEvents) {
+      expect(publisher.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ id: evt.id, eventType: evt.eventType, attempts: 1 }),
+      );
+      const row = await database.outboxEvent.findUnique({ where: { id: evt.id } });
+      expect(row?.status).toBe('PUBLISHED');
+    }
+  });
+
+  it('claims and publishes inspection lifecycle events (InspectionCreated, InspectionCompleted, InspectionFailed, InspectionCriticalFailureDetected, InspectionCancelled)', async () => {
+    const inspectionEvents = [
+      { id: '72000000-0000-4000-8000-000000000050', eventType: 'InspectionCreated' },
+      { id: '72000000-0000-4000-8000-000000000051', eventType: 'InspectionCompleted' },
+      { id: '72000000-0000-4000-8000-000000000052', eventType: 'InspectionFailed' },
+      {
+        id: '72000000-0000-4000-8000-000000000053',
+        eventType: 'InspectionCriticalFailureDetected',
+      },
+      { id: '72000000-0000-4000-8000-000000000054', eventType: 'InspectionCancelled' },
+    ];
+    for (const evt of inspectionEvents) {
+      await database.outboxEvent.create({
+        data: {
+          id: evt.id,
+          organizationId,
+          eventType: evt.eventType,
+          aggregateType: 'Inspection',
+          aggregateId: '92000000-0000-4000-8000-000000000001',
+          payload: { eventId: evt.id, eventType: evt.eventType },
+          occurredAt: new Date(),
+        },
+      });
+    }
+
+    const store = new PrismaOutboxStore(database);
+    const publisher = {
+      publish: vi.fn().mockResolvedValue(undefined),
+    } as IntegrationEventPublisher;
+    const processor = new OutboxProcessorService(store, publisher, config);
+
+    const processed = await processor.processBatch();
+    expect(processed).toBe(5);
+    for (const evt of inspectionEvents) {
       expect(publisher.publish).toHaveBeenCalledWith(
         expect.objectContaining({ id: evt.id, eventType: evt.eventType, attempts: 1 }),
       );

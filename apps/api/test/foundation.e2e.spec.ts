@@ -30,7 +30,7 @@ const ids = {
 
 const databaseUrl =
   process.env.DATABASE_URL ??
-  'postgresql://vehicle_management:local_vehicle_management@localhost:55432/vehicle_management?schema=public';
+  'postgresql://vehicle_management:local_vehicle_management@localhost:5432/vehicle_management?schema=public';
 Object.assign(process.env, {
   NODE_ENV: 'test',
   DATABASE_URL: databaseUrl,

@@ -529,3 +529,577 @@ export const assignmentApi = {
     return requestApi<VehicleDriverAssignmentRecord[]>(`/drivers/${driverId}/assignments`);
   },
 };
+
+export type TripStatus = 'DRAFT' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'ABORTED';
+
+export interface TripRecord {
+  id: string;
+  organizationId: string;
+  displayId: string;
+  assignmentId: string;
+  vehicleId: string;
+  driverId: string;
+  status: TripStatus;
+  origin: string;
+  destination: string;
+  purpose: string | null;
+  plannedStartAt: string | null;
+  plannedEndAt: string | null;
+  actualStartAt: string | null;
+  actualEndAt: string | null;
+  startOdometerKm: number | null;
+  endOdometerKm: number | null;
+  distanceKm: number | null;
+  cancelReason: string | null;
+  abortReason: string | null;
+  notes: string | null;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  vehicle?: {
+    id: string;
+    displayId: string;
+    registration: string;
+    model: string;
+    odometerKm: number;
+  };
+  driver?: {
+    id: string;
+    displayId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  assignment?: {
+    id: string;
+    status: string;
+  };
+}
+
+export interface TripStatusHistoryEntry {
+  id: string;
+  organizationId: string;
+  tripId: string;
+  fromStatus: TripStatus | null;
+  toStatus: TripStatus;
+  reason: string | null;
+  changedBy: string;
+  createdAt: string;
+}
+
+export interface TripListResponse {
+  items: TripRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CreateTripInput {
+  assignmentId: string;
+  origin: string;
+  destination: string;
+  purpose?: string | undefined;
+  plannedStartAt?: string | undefined;
+  plannedEndAt?: string | undefined;
+  notes?: string | undefined;
+}
+
+export interface UpdateTripInput {
+  version: number;
+  origin?: string | undefined;
+  destination?: string | undefined;
+  purpose?: string | undefined;
+  plannedStartAt?: string | undefined;
+  plannedEndAt?: string | undefined;
+  notes?: string | undefined;
+}
+
+export interface MarkTripReadyInput {
+  version: number;
+}
+
+export interface StartTripInput {
+  version: number;
+  startOdometerKm: number;
+}
+
+export interface CompleteTripInput {
+  version: number;
+  endOdometerKm: number;
+  notes?: string | undefined;
+}
+
+export interface CancelTripInput {
+  version: number;
+  cancelReason?: string | undefined;
+}
+
+export interface AbortTripInput {
+  version: number;
+  endOdometerKm: number;
+  abortReason: string;
+}
+
+export const tripApi = {
+  fetchTrips(params?: {
+    status?: TripStatus;
+    vehicleId?: string;
+    driverId?: string;
+    assignmentId?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<TripListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.vehicleId) searchParams.set('vehicleId', params.vehicleId);
+    if (params?.driverId) searchParams.set('driverId', params.driverId);
+    if (params?.assignmentId) searchParams.set('assignmentId', params.assignmentId);
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.limit !== undefined) searchParams.set('limit', String(params.limit));
+    if (params?.offset !== undefined) searchParams.set('offset', String(params.offset));
+    const qs = searchParams.toString();
+    return requestApi<TripListResponse>(`/trips${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchTrip(tripId: string): Promise<TripRecord> {
+    return requestApi<TripRecord>(`/trips/${tripId}`);
+  },
+
+  createTrip(input: CreateTripInput): Promise<TripRecord> {
+    return requestApi<TripRecord>('/trips', {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  updateTrip(tripId: string, input: UpdateTripInput): Promise<TripRecord> {
+    return requestApi<TripRecord>(`/trips/${tripId}`, {
+      method: 'PATCH',
+      body: input,
+    });
+  },
+
+  markTripReady(tripId: string, input: MarkTripReadyInput): Promise<TripRecord> {
+    return requestApi<TripRecord>(`/trips/${tripId}/ready`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  startTrip(tripId: string, input: StartTripInput): Promise<TripRecord> {
+    return requestApi<TripRecord>(`/trips/${tripId}/start`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  completeTrip(tripId: string, input: CompleteTripInput): Promise<TripRecord> {
+    return requestApi<TripRecord>(`/trips/${tripId}/complete`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  cancelTrip(tripId: string, input: CancelTripInput): Promise<TripRecord> {
+    return requestApi<TripRecord>(`/trips/${tripId}/cancel`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  abortTrip(tripId: string, input: AbortTripInput): Promise<TripRecord> {
+    return requestApi<TripRecord>(`/trips/${tripId}/abort`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  fetchTripStatusHistory(tripId: string): Promise<TripStatusHistoryEntry[]> {
+    return requestApi<TripStatusHistoryEntry[]>(`/trips/${tripId}/status-history`);
+  },
+
+  fetchVehicleCurrentTrip(vehicleId: string): Promise<TripRecord | null> {
+    return requestApi<TripRecord | null>(`/vehicles/${vehicleId}/current-trip`);
+  },
+
+  fetchVehicleTripHistory(
+    vehicleId: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<TripListResponse> {
+    const searchParams = new URLSearchParams();
+    if (limit !== undefined) searchParams.set('limit', String(limit));
+    if (offset !== undefined) searchParams.set('offset', String(offset));
+    const qs = searchParams.toString();
+    return requestApi<TripListResponse>(`/vehicles/${vehicleId}/trips${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchDriverCurrentTrip(driverId: string): Promise<TripRecord | null> {
+    return requestApi<TripRecord | null>(`/drivers/${driverId}/current-trip`);
+  },
+
+  fetchDriverTripHistory(
+    driverId: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<TripListResponse> {
+    const searchParams = new URLSearchParams();
+    if (limit !== undefined) searchParams.set('limit', String(limit));
+    if (offset !== undefined) searchParams.set('offset', String(offset));
+    const qs = searchParams.toString();
+    return requestApi<TripListResponse>(`/drivers/${driverId}/trips${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchAssignmentTripHistory(
+    assignmentId: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<TripListResponse> {
+    const searchParams = new URLSearchParams();
+    if (limit !== undefined) searchParams.set('limit', String(limit));
+    if (offset !== undefined) searchParams.set('offset', String(offset));
+    const qs = searchParams.toString();
+    return requestApi<TripListResponse>(`/assignments/${assignmentId}/trips${qs ? `?${qs}` : ''}`);
+  },
+};
+
+// -------------------------------------------------------------
+// Milestone 6: Inspection API
+// -------------------------------------------------------------
+export const inspectionApi = {
+  fetchInspectionTemplates(
+    type?: InspectionType,
+    status?: InspectionTemplateStatus,
+    limit?: number,
+    offset?: number,
+  ): Promise<InspectionTemplateListResponse> {
+    const searchParams = new URLSearchParams();
+    if (type) searchParams.set('type', type);
+    if (status) searchParams.set('status', status);
+    if (limit !== undefined) searchParams.set('limit', String(limit));
+    if (offset !== undefined) searchParams.set('offset', String(offset));
+    const qs = searchParams.toString();
+    return requestApi<InspectionTemplateListResponse>(`/inspection-templates${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchInspectionTemplate(templateId: string): Promise<InspectionTemplateRecord> {
+    return requestApi<InspectionTemplateRecord>(`/inspection-templates/${templateId}`);
+  },
+
+  createInspectionTemplate(
+    input: CreateInspectionTemplateInput,
+  ): Promise<InspectionTemplateRecord> {
+    return requestApi<InspectionTemplateRecord>('/inspection-templates', {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  updateInspectionTemplate(
+    templateId: string,
+    input: UpdateInspectionTemplateInput,
+  ): Promise<InspectionTemplateRecord> {
+    return requestApi<InspectionTemplateRecord>(`/inspection-templates/${templateId}`, {
+      method: 'PATCH',
+      body: input,
+    });
+  },
+
+  activateInspectionTemplate(
+    templateId: string,
+    version: number,
+  ): Promise<InspectionTemplateRecord> {
+    return requestApi<InspectionTemplateRecord>(`/inspection-templates/${templateId}/activate`, {
+      method: 'POST',
+      body: { version },
+    });
+  },
+
+  archiveInspectionTemplate(
+    templateId: string,
+    version: number,
+  ): Promise<InspectionTemplateRecord> {
+    return requestApi<InspectionTemplateRecord>(`/inspection-templates/${templateId}/archive`, {
+      method: 'POST',
+      body: { version },
+    });
+  },
+
+  // -------------------------------------------------------------
+  // Milestone 6: Inspections
+  // -------------------------------------------------------------
+  fetchInspections(filters?: {
+    type?: InspectionType | undefined;
+    status?: InspectionStatus | undefined;
+    result?: InspectionResult | undefined;
+    vehicleId?: string | undefined;
+    tripId?: string | undefined;
+    driverId?: string | undefined;
+    limit?: number | undefined;
+    offset?: number | undefined;
+  }): Promise<InspectionListResponse> {
+    const searchParams = new URLSearchParams();
+    if (filters?.type) searchParams.set('type', filters.type);
+    if (filters?.status) searchParams.set('status', filters.status);
+    if (filters?.result) searchParams.set('result', filters.result);
+    if (filters?.vehicleId) searchParams.set('vehicleId', filters.vehicleId);
+    if (filters?.tripId) searchParams.set('tripId', filters.tripId);
+    if (filters?.driverId) searchParams.set('driverId', filters.driverId);
+    if (filters?.limit !== undefined) searchParams.set('limit', String(filters.limit));
+    if (filters?.offset !== undefined) searchParams.set('offset', String(filters.offset));
+    const qs = searchParams.toString();
+    return requestApi<InspectionListResponse>(`/inspections${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchInspection(inspectionId: string): Promise<InspectionRecord> {
+    return requestApi<InspectionRecord>(`/inspections/${inspectionId}`);
+  },
+
+  createInspection(input: CreateInspectionInput): Promise<InspectionRecord> {
+    return requestApi<InspectionRecord>('/inspections', {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  startInspection(inspectionId: string, version: number): Promise<InspectionRecord> {
+    return requestApi<InspectionRecord>(`/inspections/${inspectionId}/start`, {
+      method: 'POST',
+      body: { version },
+    });
+  },
+
+  saveInspectionResponses(
+    inspectionId: string,
+    input: SaveInspectionResponsesInput,
+  ): Promise<InspectionRecord> {
+    return requestApi<InspectionRecord>(`/inspections/${inspectionId}/responses`, {
+      method: 'PUT',
+      body: input,
+    });
+  },
+
+  completeInspection(inspectionId: string, version: number): Promise<InspectionRecord> {
+    return requestApi<InspectionRecord>(`/inspections/${inspectionId}/complete`, {
+      method: 'POST',
+      body: { version },
+    });
+  },
+
+  cancelInspection(inspectionId: string, input: CancelInspectionInput): Promise<InspectionRecord> {
+    return requestApi<InspectionRecord>(`/inspections/${inspectionId}/cancel`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  fetchVehicleInspections(
+    vehicleId: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<InspectionListResponse> {
+    const searchParams = new URLSearchParams();
+    if (limit !== undefined) searchParams.set('limit', String(limit));
+    if (offset !== undefined) searchParams.set('offset', String(offset));
+    const qs = searchParams.toString();
+    return requestApi<InspectionListResponse>(
+      `/vehicles/${vehicleId}/inspections${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  fetchTripInspections(
+    tripId: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<InspectionListResponse> {
+    const searchParams = new URLSearchParams();
+    if (limit !== undefined) searchParams.set('limit', String(limit));
+    if (offset !== undefined) searchParams.set('offset', String(offset));
+    const qs = searchParams.toString();
+    return requestApi<InspectionListResponse>(`/trips/${tripId}/inspections${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchDriverInspections(
+    driverId: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<InspectionListResponse> {
+    const searchParams = new URLSearchParams();
+    if (limit !== undefined) searchParams.set('limit', String(limit));
+    if (offset !== undefined) searchParams.set('offset', String(offset));
+    const qs = searchParams.toString();
+    return requestApi<InspectionListResponse>(
+      `/drivers/${driverId}/inspections${qs ? `?${qs}` : ''}`,
+    );
+  },
+};
+
+export const api = inspectionApi;
+
+// =================================================================
+// Milestone 6: Inspection Type Definitions
+// =================================================================
+
+export type InspectionType = 'PRE_TRIP' | 'POST_TRIP' | 'PERIODIC' | 'SAFETY' | 'CUSTOM';
+export type InspectionTemplateStatus = 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+export type InspectionItemSeverity = 'NORMAL' | 'CRITICAL';
+export type InspectionStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type InspectionResult = 'PASS' | 'FAIL';
+export type InspectionResponseResult = 'PASS' | 'FAIL' | 'NOT_APPLICABLE';
+
+export interface InspectionTemplateItemRecord {
+  id: string;
+  templateId: string;
+  organizationId: string;
+  category: string;
+  prompt: string;
+  description?: string | null;
+  required: boolean;
+  severity: InspectionItemSeverity;
+  sortOrder: number;
+}
+
+export interface InspectionTemplateRecord {
+  id: string;
+  organizationId: string;
+  name: string;
+  description?: string | null;
+  type: InspectionType;
+  status: InspectionTemplateStatus;
+  version: number;
+  items?: InspectionTemplateItemRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InspectionTemplateListResponse {
+  items: InspectionTemplateRecord[];
+  total: number;
+}
+
+export interface CreateInspectionTemplateInput {
+  name: string;
+  description?: string | undefined;
+  type: InspectionType;
+  items: Array<{
+    category: string;
+    prompt: string;
+    description?: string | undefined;
+    required?: boolean | undefined;
+    severity?: InspectionItemSeverity | undefined;
+    sortOrder?: number | undefined;
+  }>;
+}
+
+export interface UpdateInspectionTemplateInput {
+  version: number;
+  name?: string | undefined;
+  description?: string | undefined;
+  items?: Array<{
+    category: string;
+    prompt: string;
+    description?: string | undefined;
+    required?: boolean | undefined;
+    severity?: InspectionItemSeverity | undefined;
+    sortOrder?: number | undefined;
+  }>;
+}
+
+export interface InspectionResponseDetail {
+  id: string;
+  templateItemId: string;
+  category: string;
+  prompt: string;
+  description?: string | null;
+  required: boolean;
+  severity: InspectionItemSeverity;
+  sortOrder: number;
+  response: InspectionResponseResult;
+  comment?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InspectionRecord {
+  id: string;
+  organizationId: string;
+  displayId: string;
+  templateId: string;
+  template: {
+    id: string;
+    name: string;
+    type: InspectionType;
+    version: number;
+  };
+  type: InspectionType;
+  vehicleId: string;
+  vehicle: {
+    id: string;
+    displayId: string;
+    registration: string;
+    model: string;
+    type: string;
+    odometerKm: number;
+    status: string;
+  };
+  driverId?: string | null;
+  driver?: {
+    id: string;
+    displayId: string;
+    firstName: string;
+    lastName: string;
+    status: string;
+  } | null;
+  assignmentId?: string | null;
+  tripId?: string | null;
+  trip?: {
+    id: string;
+    displayId: string;
+    status: string;
+    origin: string;
+    destination: string;
+  } | null;
+  status: InspectionStatus;
+  result?: InspectionResult | null;
+  hasCriticalFailure: boolean;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
+  performedBy?: string | null;
+  notes?: string | null;
+  version: number;
+  responses?: InspectionResponseDetail[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InspectionListResponse {
+  items: InspectionRecord[];
+  total: number;
+}
+
+export interface CreateInspectionInput {
+  templateId: string;
+  type: InspectionType;
+  vehicleId: string;
+  tripId?: string | undefined;
+  notes?: string | undefined;
+}
+
+export interface SaveInspectionResponsesInput {
+  version: number;
+  responses: Array<{
+    templateItemId: string;
+    response: InspectionResponseResult;
+    comment?: string | undefined;
+  }>;
+}
+
+export interface CancelInspectionInput {
+  version: number;
+  cancelReason: string;
+}

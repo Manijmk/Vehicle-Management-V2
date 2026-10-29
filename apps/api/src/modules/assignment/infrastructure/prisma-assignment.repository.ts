@@ -305,6 +305,21 @@ export class PrismaAssignmentRepository implements AssignmentRepository {
 
       assertAssignmentTransition(before.status as AssignmentStatus, 'ENDED');
 
+      const activeTripCount = await tx.trip.count({
+        where: {
+          organizationId: input.organizationId,
+          assignmentId: input.assignmentId,
+          status: { in: ['DRAFT', 'READY', 'IN_PROGRESS'] },
+        },
+      });
+
+      if (activeTripCount > 0) {
+        throw new ApplicationError(
+          'ASSIGNMENT_HAS_ACTIVE_TRIP',
+          'Cannot end assignment while a non-terminal trip exists',
+        );
+      }
+
       const endReason = normalizeEndReason(input.endReason);
       const endedAt = input.endedAt ?? new Date();
       assertAssignmentDates(before.startedAt, endedAt);

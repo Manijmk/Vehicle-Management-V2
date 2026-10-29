@@ -14,12 +14,20 @@ export function createDatabaseClient(config: DatabaseClientConfig): PrismaClient
 
 export type { PrismaClient } from './generated/client.js';
 export {
+  AssignmentStatus,
   DriverStatus,
   FuelType,
+  InspectionItemSeverity,
+  InspectionResponseResult,
+  InspectionResult,
+  InspectionStatus,
+  InspectionTemplateStatus,
+  InspectionType,
   MembershipStatus,
   OutboxStatus,
   PrincipalStatus,
   Prisma,
+  TripStatus,
   VehicleStatus,
   VehicleType,
 } from './generated/client.js';

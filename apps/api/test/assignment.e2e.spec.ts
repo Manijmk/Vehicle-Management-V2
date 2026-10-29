@@ -27,7 +27,7 @@ const ids = {
 
 const databaseUrl =
   process.env.DATABASE_URL ??
-  'postgresql://vehicle_management:local_vehicle_management@localhost:55432/vehicle_management?schema=public';
+  'postgresql://vehicle_management:local_vehicle_management@localhost:5432/vehicle_management?schema=public';
 
 Object.assign(process.env, {
   NODE_ENV: 'test',
@@ -186,7 +186,7 @@ describe('Vehicle-Driver Assignment E2E', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    configureApiApplication(app, { API_CORS_ORIGINS: 'http://localhost:3000' });
+    configureApiApplication(app, { API_CORS_ORIGINS: ['http://localhost:3000'] });
     await app.init();
   });
 
@@ -197,6 +197,11 @@ describe('Vehicle-Driver Assignment E2E', () => {
 
   // Helper to create and activate a vehicle
   async function createActiveVehicle(orgId: string, token: string, tag: string) {
+    const safeVinTag = tag
+      .toUpperCase()
+      .replace(/[^A-HJ-NPR-Z0-9]/g, 'X')
+      .padEnd(6, '0')
+      .slice(0, 6);
     const createRes = await request(app.getHttpServer())
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${token}`)
@@ -204,13 +209,14 @@ describe('Vehicle-Driver Assignment E2E', () => {
       .send({
         displayId: `VH-${tag}`,
         registration: `REG-${tag}`,
-        vin: `1HGCR2F83HA${tag.padEnd(6, '0').slice(0, 6)}`,
+        vin: `1HGCR2F83HA${safeVinTag}`,
         type: 'CAR',
         fuelType: 'PETROL',
         model: 'Model T',
         year: 2024,
         odometerKm: 1000,
       });
+    expect(createRes.status).toBe(201);
     const vehicle = createRes.body;
 
     const activateRes = await request(app.getHttpServer())

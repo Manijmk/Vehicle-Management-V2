@@ -4,12 +4,14 @@ test.describe('Vehicle-Driver Assignment Lifecycle and Authorization Acceptance 
   test('exercises complete assignment lifecycle: pairing active vehicle & eligible driver, verifying bidirectional detail views, enforcing lifecycle guards, and ending assignment', async ({
     page,
   }) => {
-    const timestamp = Date.now().toString().slice(-6);
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const timestamp = `${Date.now().toString().slice(-4)}${randomSuffix}`;
     const vehicleDisplayId = `V-ASN-${timestamp}`;
-    const vehicleReg = `PW-${timestamp.slice(0, 4)}AB`;
+    const vehicleReg = `AS-${randomSuffix}AB`;
     const safeTag = timestamp
       .toUpperCase()
       .replace(/[^A-HJ-NPR-Z0-9]/g, 'X')
+      .slice(-6)
       .padStart(6, '0');
     const vehicleVin = `1HGCR2F83HA${safeTag}`;
 
@@ -134,6 +136,23 @@ test.describe('Vehicle-Driver Assignment Lifecycle and Authorization Acceptance 
     );
     // Cancel deactivation modal
     await page.getByRole('button', { name: 'Cancel' }).click();
+
+    // Suspend Driver while assigned -> assignment remains ACTIVE, driver becomes Ineligible
+    await page.getByTestId('suspend-driver-button').click();
+    await expect(page.getByTestId('suspend-modal')).toBeVisible();
+    await page.getByTestId('suspend-reason-input').fill('Temporary medical hold');
+    await page.getByTestId('confirm-suspend-button').click();
+    await expect(page.getByTestId('driver-status-badge-suspended')).toBeVisible();
+    await expect(page.getByTestId('driver-eligibility-badge')).toContainText('Ineligible');
+    await expect(page.getByTestId('current-assignment-card')).toBeVisible();
+    await expect(page.getByTestId('assignment-status-badge')).toHaveText('ACTIVE');
+
+    // Reactivate Driver where license remains valid
+    await page.getByTestId('reactivate-driver-button').click();
+    await expect(page.getByTestId('driver-status-badge-active')).toBeVisible();
+    await expect(page.getByTestId('driver-eligibility-badge')).toContainText('Eligible');
+    await expect(page.getByTestId('current-assignment-card')).toBeVisible();
+    await expect(page.getByTestId('assignment-status-badge')).toHaveText('ACTIVE');
 
     // 7. End Assignment
     await page.goto(`/assignments/${assignmentId}`);

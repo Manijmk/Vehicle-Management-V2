@@ -3,13 +3,16 @@ import {
   Controller,
   Get,
   HttpCode,
+  HttpStatus,
   Inject,
   Param,
   ParseUUIDPipe,
   Post,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -144,12 +147,13 @@ export class VehicleAssignmentController {
   async getCurrentAssignment(
     @Param('vehicleId', new ParseUUIDPipe({ version: '4' })) vehicleId: string,
     @Req() request: AuthenticatedRequest,
-  ): Promise<unknown> {
+    @Res() response: Response,
+  ): Promise<void> {
     const current = await this.service.getCurrentAssignmentForVehicle(
       request.tenant!.organizationId,
       vehicleId,
     );
-    return current ?? null;
+    response.status(HttpStatus.OK).json(current ?? null);
   }
 
   @Get('assignments')
@@ -184,12 +188,13 @@ export class DriverAssignmentController {
   async getCurrentAssignment(
     @Param('driverId', new ParseUUIDPipe({ version: '4' })) driverId: string,
     @Req() request: AuthenticatedRequest,
-  ): Promise<unknown> {
+    @Res() response: Response,
+  ): Promise<void> {
     const current = await this.service.getCurrentAssignmentForDriver(
       request.tenant!.organizationId,
       driverId,
     );
-    return current ?? null;
+    response.status(HttpStatus.OK).json(current ?? null);
   }
 
   @Get('assignments')

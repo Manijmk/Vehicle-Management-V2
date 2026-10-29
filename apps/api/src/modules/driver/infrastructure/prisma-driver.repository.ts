@@ -548,6 +548,20 @@ export class PrismaDriverRepository implements DriverRepository {
 
       assertDriverTransition(before.status as DriverStatus, 'INACTIVE');
 
+      const activeAssignment = await tx.vehicleDriverAssignment.findFirst({
+        where: {
+          driverId: input.driverId,
+          organizationId: input.organizationId,
+          status: 'ACTIVE',
+        },
+      });
+      if (activeAssignment !== null) {
+        throw new ApplicationError(
+          'DRIVER_HAS_ACTIVE_ASSIGNMENT',
+          'Cannot deactivate driver while an active vehicle assignment exists',
+        );
+      }
+
       const result = await tx.driver.updateMany({
         where: {
           id: input.driverId,
