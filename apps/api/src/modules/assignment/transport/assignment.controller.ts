@@ -35,7 +35,7 @@ function mutationMetadata(request: AuthenticatedRequest) {
   const ipAddress = request.ip ?? '127.0.0.1';
   const userAgent = Array.isArray(request.headers['user-agent'])
     ? request.headers['user-agent'][0]
-    : request.headers['user-agent'] ?? 'unknown';
+    : (request.headers['user-agent'] ?? 'unknown');
 
   return {
     actorId: request.principal.userId,

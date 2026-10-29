@@ -21,7 +21,9 @@ export default function DriverDetailPage() {
 
   const [driver, setDriver] = useState<DriverRecord | null>(null);
   const [history, setHistory] = useState<DriverStatusHistoryEntry[]>([]);
-  const [currentAssignment, setCurrentAssignment] = useState<VehicleDriverAssignmentRecord | null>(null);
+  const [currentAssignment, setCurrentAssignment] = useState<VehicleDriverAssignmentRecord | null>(
+    null,
+  );
   const [assignmentHistory, setAssignmentHistory] = useState<VehicleDriverAssignmentRecord[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -173,10 +175,7 @@ export default function DriverDetailPage() {
   const handleDeactivate = async () => {
     if (!driver || !deactivateReason.trim()) return;
     if (currentAssignment) {
-      setActionErrorMessage(
-        'Cannot deactivate driver: driver currently has an active vehicle assignment.',
-      );
-      setIsDeactivating(false);
+      setActionErrorMessage('Cannot deactivate driver while an active vehicle assignment exists.');
       return;
     }
     try {
@@ -190,7 +189,7 @@ export default function DriverDetailPage() {
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'DRIVER_HAS_ACTIVE_ASSIGNMENT') {
         setActionErrorMessage(
-          'Cannot deactivate driver: driver currently has an active vehicle assignment.',
+          'Cannot deactivate driver while an active vehicle assignment exists.',
         );
       } else if (err instanceof ApiClientError && err.code === 'CONCURRENCY_CONFLICT') {
         setConflictMessage(
@@ -451,12 +450,7 @@ export default function DriverDetailPage() {
                 type="button"
                 className="secondary-action compact-btn"
                 style={{ color: '#b3261e' }}
-                disabled={actionLoading !== null || Boolean(currentAssignment)}
-                title={
-                  currentAssignment
-                    ? 'Cannot deactivate driver while actively assigned to a vehicle'
-                    : undefined
-                }
+                disabled={actionLoading !== null}
                 onClick={() => setIsDeactivating(true)}
                 data-testid="deactivate-driver-button"
               >
@@ -952,7 +946,7 @@ export default function DriverDetailPage() {
           ) : null}
         </div>
         {currentAssignment && currentAssignment.vehicle ? (
-          <div style={{ marginTop: '1rem' }} data-testid="current-assignment-details">
+          <div style={{ marginTop: '1rem' }} data-testid="current-assignment-card">
             <dl>
               <div
                 style={{
@@ -966,11 +960,33 @@ export default function DriverDetailPage() {
                 <dt style={{ color: 'var(--muted)', fontWeight: 700 }}>Assigned Vehicle</dt>
                 <dd style={{ margin: 0 }}>
                   <Link href={`/vehicles/${currentAssignment.vehicle.id}`} className="table-link">
-                    <strong data-testid="assigned-vehicle-registration">
+                    <strong data-testid="assigned-vehicle-display">
+                      {currentAssignment.vehicle.displayId}
+                    </strong>{' '}
+                    <span data-testid="assigned-vehicle-registration">
                       {currentAssignment.vehicle.registration}
-                    </strong>
+                    </span>
                   </Link>{' '}
                   ({currentAssignment.vehicle.displayId})
+                </dd>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '160px 1fr',
+                  gap: '0.6rem',
+                  paddingBottom: '0.5rem',
+                  borderBottom: '1px solid var(--line)',
+                }}
+              >
+                <dt style={{ color: 'var(--muted)', fontWeight: 700 }}>Assignment Status</dt>
+                <dd style={{ margin: 0 }}>
+                  <span
+                    className={`status-pill status-${currentAssignment.status.toLowerCase()}`}
+                    data-testid="assignment-status-badge"
+                  >
+                    {currentAssignment.status}
+                  </span>
                 </dd>
               </div>
               <div
@@ -998,7 +1014,7 @@ export default function DriverDetailPage() {
         ) : (
           <p
             style={{ marginTop: '0.75rem', color: 'var(--muted)' }}
-            data-testid="no-active-assignment-msg"
+            data-testid="no-active-assignment-text"
           >
             No vehicle is currently assigned to this driver.
           </p>
@@ -1019,7 +1035,7 @@ export default function DriverDetailPage() {
           <ul
             className="history-list"
             style={{ marginTop: '1rem' }}
-            data-testid="assignment-history-list"
+            data-testid="assignment-history-table"
           >
             {assignmentHistory.map((item) => (
               <li key={item.id} data-testid={`assignment-history-item-${item.id}`}>
@@ -1028,7 +1044,10 @@ export default function DriverDetailPage() {
                     Assignment {item.id.slice(0, 8)}
                   </Link>{' '}
                   —{' '}
-                  {item.vehicle ? item.vehicle.registration : 'Unknown Vehicle'} ({item.status})
+                  {item.vehicle
+                    ? `${item.vehicle.displayId} (${item.vehicle.registration})`
+                    : 'Unknown Vehicle'}{' '}
+                  ({item.status})
                 </strong>
                 <span className="history-meta">
                   {new Date(item.startedAt).toLocaleDateString()}

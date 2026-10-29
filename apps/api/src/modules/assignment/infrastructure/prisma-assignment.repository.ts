@@ -11,7 +11,6 @@ import {
   assertVehicleEligibleForAssignment,
   normalizeEndReason,
   normalizeNotes,
-  type AssignmentRecord,
   type AssignmentStatus,
 } from '../domain/assignment.js';
 import type {

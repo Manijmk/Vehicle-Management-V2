@@ -64,11 +64,11 @@ test.describe('Vehicle Management Lifecycle and Authorization Acceptance Flow', 
     const editBtn = page.getByTestId('edit-vehicle-btn');
     await expect(editBtn).toBeVisible();
     await editBtn.click();
-    await expect(page.getByTestId('edit-vehicle-form')).toBeVisible();
+    await expect(page.getByTestId('edit-form-panel')).toBeVisible();
 
-    await page.getByTestId('edit-model-input').fill('Playwright Fleet Cruiser Updated');
-    await page.getByTestId('edit-odometer-input').fill('14000');
-    await page.getByTestId('edit-notes-input').fill('Updated via Playwright E2E');
+    await page.getByTestId('edit-input-model').fill('Playwright Fleet Cruiser Updated');
+    await page.getByTestId('edit-input-odometer').fill('14000');
+    await page.getByTestId('edit-input-notes').fill('Updated via Playwright E2E');
     await page.getByTestId('save-edit-btn').click();
 
     // Verify updated metadata
@@ -108,9 +108,9 @@ test.describe('Vehicle Management Lifecycle and Authorization Acceptance Flow', 
 
     // 10. Verify RETIRED terminal state
     await expect(page.getByTestId('detail-status')).toHaveText('RETIRED');
-    await expect(page.getByTestId('terminal-notice')).toBeVisible();
-    await expect(page.getByTestId('terminal-notice')).toContainText(
-      'Retirement is a terminal lifecycle state',
+    await expect(page.getByTestId('terminal-status-notice')).toBeVisible();
+    await expect(page.getByTestId('terminal-status-notice')).toContainText(
+      'This vehicle is retired',
     );
     await expect(page.getByTestId('status-history-list')).toContainText('ACTIVE → RETIRED');
     await expect(page.getByTestId('status-history-list')).toContainText(

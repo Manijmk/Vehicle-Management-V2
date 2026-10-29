@@ -22,7 +22,9 @@ export default function VehicleDetailPage() {
 
   const [vehicle, setVehicle] = useState<VehicleRecord | null>(null);
   const [history, setHistory] = useState<VehicleStatusHistoryEntry[]>([]);
-  const [currentAssignment, setCurrentAssignment] = useState<VehicleDriverAssignmentRecord | null>(null);
+  const [currentAssignment, setCurrentAssignment] = useState<VehicleDriverAssignmentRecord | null>(
+    null,
+  );
   const [assignmentHistory, setAssignmentHistory] = useState<VehicleDriverAssignmentRecord[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,11 +120,10 @@ export default function VehicleDetailPage() {
     }
   };
 
-  // Retire handler
   const handleRetire = async () => {
     if (!vehicle) return;
     if (currentAssignment) {
-      setRetireError('Cannot retire vehicle: it currently has an active driver assignment.');
+      setRetireError('Cannot retire vehicle while it has an active driver assignment.');
       return;
     }
     const reason = retireReason.trim();
@@ -141,7 +142,7 @@ export default function VehicleDetailPage() {
       await loadData();
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'VEHICLE_HAS_ACTIVE_ASSIGNMENT') {
-        setRetireError('Cannot retire vehicle: it currently has an active driver assignment.');
+        setRetireError('Cannot retire vehicle while it has an active driver assignment.');
       } else if (err instanceof ApiClientError && err.code === 'CONCURRENCY_CONFLICT') {
         setConflictMessage(
           'Concurrency Conflict: Vehicle was modified by another request. Please reload.',
@@ -259,12 +260,7 @@ export default function VehicleDetailPage() {
               type="button"
               className="secondary-action warning"
               data-testid="retire-vehicle-btn"
-              disabled={Boolean(actionLoading) || Boolean(currentAssignment)}
-              title={
-                currentAssignment
-                  ? 'Cannot retire vehicle while actively assigned to a driver'
-                  : undefined
-              }
+              disabled={Boolean(actionLoading)}
               onClick={() => setIsRetiring(true)}
             >
               Retire
@@ -534,7 +530,7 @@ export default function VehicleDetailPage() {
           ) : null}
         </div>
         {currentAssignment && currentAssignment.driver ? (
-          <div style={{ marginTop: '1rem' }} data-testid="current-assignment-details">
+          <div style={{ marginTop: '1rem' }} data-testid="current-assignment-card">
             <dl>
               <div
                 style={{
@@ -564,11 +560,30 @@ export default function VehicleDetailPage() {
                   borderBottom: '1px solid var(--line)',
                 }}
               >
+                <dt style={{ color: 'var(--muted)', fontWeight: 700 }}>Assignment Status</dt>
+                <dd style={{ margin: 0 }}>
+                  <span
+                    className={`status-pill status-${currentAssignment.status.toLowerCase()}`}
+                    data-testid="assignment-status-badge"
+                  >
+                    {currentAssignment.status}
+                  </span>
+                </dd>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '160px 1fr',
+                  gap: '0.6rem',
+                  paddingBottom: '0.5rem',
+                  borderBottom: '1px solid var(--line)',
+                }}
+              >
                 <dt style={{ color: 'var(--muted)', fontWeight: 700 }}>Driver Eligibility</dt>
                 <dd style={{ margin: 0 }}>
-                  {currentAssignment.driver.eligible ??
+                  {(currentAssignment.driver.eligible ??
                   currentAssignment.driver.isOperationallyEligible ??
-                  currentAssignment.driver.status === 'ACTIVE' ? (
+                  currentAssignment.driver.status === 'ACTIVE') ? (
                     <span
                       className="status-pill status-eligible"
                       data-testid="assigned-driver-eligibility"
@@ -611,7 +626,7 @@ export default function VehicleDetailPage() {
         ) : (
           <p
             style={{ marginTop: '0.75rem', color: 'var(--muted)' }}
-            data-testid="no-active-assignment-msg"
+            data-testid="no-active-assignment-text"
           >
             No driver is currently assigned to this vehicle.
           </p>
@@ -632,7 +647,7 @@ export default function VehicleDetailPage() {
           <ul
             className="history-list"
             style={{ marginTop: '1rem' }}
-            data-testid="assignment-history-list"
+            data-testid="assignment-history-table"
           >
             {assignmentHistory.map((item) => (
               <li key={item.id} data-testid={`assignment-history-item-${item.id}`}>

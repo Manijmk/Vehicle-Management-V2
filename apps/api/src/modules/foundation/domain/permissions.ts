@@ -22,6 +22,9 @@ export const permissionCodes = [
   'driver.deactivate',
   'driver.license.manage',
   'driver.history.read',
+  'assignment.read',
+  'assignment.create',
+  'assignment.end',
 ] as const;
 
 export type PermissionCode = (typeof permissionCodes)[number];

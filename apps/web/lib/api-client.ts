@@ -401,3 +401,131 @@ export const driverApi = {
     });
   },
 };
+
+export type AssignmentStatus = 'ACTIVE' | 'ENDED';
+
+export interface VehicleDriverAssignmentRecord {
+  id: string;
+  organizationId: string;
+  vehicleId: string;
+  driverId: string;
+  status: AssignmentStatus;
+  startedAt: string;
+  endedAt?: string | null;
+  endReason?: string | null;
+  notes?: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  vehicle?: {
+    id: string;
+    displayId: string;
+    registration: string;
+    vin: string;
+    status: string;
+  };
+  driver?: {
+    id: string;
+    displayId: string;
+    firstName: string;
+    lastName: string;
+    status: string;
+    eligible?: boolean;
+    isOperationallyEligible?: boolean;
+  };
+}
+
+export interface CreateAssignmentInput {
+  vehicleId: string;
+  driverId: string;
+  startedAt?: string;
+  notes?: string;
+}
+
+export interface EndAssignmentInput {
+  version: number;
+  reason?: string;
+  endReason?: string;
+  endedAt?: string;
+}
+
+export interface AssignmentListResponse {
+  items: VehicleDriverAssignmentRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export const assignmentApi = {
+  fetchAssignments(params?: {
+    status?: AssignmentStatus;
+    vehicleId?: string;
+    driverId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AssignmentListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.vehicleId) searchParams.set('vehicleId', params.vehicleId);
+    if (params?.driverId) searchParams.set('driverId', params.driverId);
+    if (params?.limit !== undefined) searchParams.set('limit', String(params.limit));
+    if (params?.offset !== undefined) searchParams.set('offset', String(params.offset));
+    const qs = searchParams.toString();
+    return requestApi<AssignmentListResponse>(`/assignments${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchAssignment(assignmentId: string): Promise<VehicleDriverAssignmentRecord> {
+    return requestApi<VehicleDriverAssignmentRecord>(`/assignments/${assignmentId}`);
+  },
+
+  createAssignment(input: CreateAssignmentInput): Promise<VehicleDriverAssignmentRecord> {
+    return requestApi<VehicleDriverAssignmentRecord>('/assignments', {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  endAssignment(
+    assignmentId: string,
+    input: EndAssignmentInput,
+  ): Promise<VehicleDriverAssignmentRecord> {
+    return requestApi<VehicleDriverAssignmentRecord>(`/assignments/${assignmentId}/end`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  fetchVehicleCurrentAssignment(vehicleId: string): Promise<VehicleDriverAssignmentRecord | null> {
+    return requestApi<VehicleDriverAssignmentRecord | null>(
+      `/vehicles/${vehicleId}/current-assignment`,
+    );
+  },
+
+  fetchCurrentAssignmentForVehicle(
+    vehicleId: string,
+  ): Promise<VehicleDriverAssignmentRecord | null> {
+    return requestApi<VehicleDriverAssignmentRecord | null>(
+      `/vehicles/${vehicleId}/current-assignment`,
+    );
+  },
+
+  fetchVehicleAssignmentHistory(vehicleId: string): Promise<VehicleDriverAssignmentRecord[]> {
+    return requestApi<VehicleDriverAssignmentRecord[]>(`/vehicles/${vehicleId}/assignments`);
+  },
+
+  fetchDriverCurrentAssignment(driverId: string): Promise<VehicleDriverAssignmentRecord | null> {
+    return requestApi<VehicleDriverAssignmentRecord | null>(
+      `/drivers/${driverId}/current-assignment`,
+    );
+  },
+
+  fetchCurrentAssignmentForDriver(driverId: string): Promise<VehicleDriverAssignmentRecord | null> {
+    return requestApi<VehicleDriverAssignmentRecord | null>(
+      `/drivers/${driverId}/current-assignment`,
+    );
+  },
+
+  fetchDriverAssignmentHistory(driverId: string): Promise<VehicleDriverAssignmentRecord[]> {
+    return requestApi<VehicleDriverAssignmentRecord[]>(`/drivers/${driverId}/assignments`);
+  },
+};

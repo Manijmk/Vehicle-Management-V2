@@ -340,14 +340,20 @@ describe('Vehicle-Driver Assignment E2E', () => {
         .set('Authorization', `Bearer ${tokenAdminA}`)
         .set('x-organization-id', ids.organizationA);
       expect(vHistRes.status).toBe(200);
-      expect(vHistRes.body.items.some((a: any) => a.id === assignment.id)).toBe(true);
+      const vItems = (Array.isArray(vHistRes.body) ? vHistRes.body : vHistRes.body.items) as Array<{
+        id: string;
+      }>;
+      expect(vItems.some((a) => a.id === assignment.id)).toBe(true);
 
       const dHistRes = await request(app.getHttpServer())
         .get(`/api/v1/drivers/${driver.id}/assignments`)
         .set('Authorization', `Bearer ${tokenAdminA}`)
         .set('x-organization-id', ids.organizationA);
       expect(dHistRes.status).toBe(200);
-      expect(dHistRes.body.items.some((a: any) => a.id === assignment.id)).toBe(true);
+      const dItems = (Array.isArray(dHistRes.body) ? dHistRes.body : dHistRes.body.items) as Array<{
+        id: string;
+      }>;
+      expect(dItems.some((a) => a.id === assignment.id)).toBe(true);
     });
   });
 

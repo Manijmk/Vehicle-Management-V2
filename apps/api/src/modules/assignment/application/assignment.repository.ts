@@ -83,8 +83,5 @@ export interface AssignmentRepository {
     organizationId: string,
     vehicleId: string,
   ): Promise<AssignmentDetail[]>;
-  getDriverAssignmentHistory(
-    organizationId: string,
-    driverId: string,
-  ): Promise<AssignmentDetail[]>;
+  getDriverAssignmentHistory(organizationId: string, driverId: string): Promise<AssignmentDetail[]>;
 }

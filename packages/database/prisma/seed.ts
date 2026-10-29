@@ -38,6 +38,9 @@ export const permissionDefinitions = [
   ['driver.deactivate', 'Deactivate drivers permanently'],
   ['driver.license.manage', 'Add, update, and remove driver licenses'],
   ['driver.history.read', 'Read driver lifecycle status history'],
+  ['assignment.read', 'Read vehicle-driver assignments'],
+  ['assignment.create', 'Create vehicle-driver assignments'],
+  ['assignment.end', 'End vehicle-driver assignments'],
 ] as const;
 
 async function seed(): Promise<void> {
@@ -147,6 +150,7 @@ async function seed(): Promise<void> {
       'vehicle.history.read',
       'driver.read',
       'driver.history.read',
+      'assignment.read',
     ];
     await database.rolePermission.createMany({
       data: viewerCodes.map((code) => ({

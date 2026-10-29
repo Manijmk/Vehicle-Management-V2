@@ -169,7 +169,8 @@ function CreateAssignmentContent() {
 
             {selectedDriver && !isDriverEligible ? (
               <div className="warning-banner" data-testid="driver-eligibility-warning">
-                <strong>Warning:</strong> Selected driver does not currently have a valid unexpired license. Assignment creation will be rejected.
+                <strong>Warning:</strong> Selected driver does not currently have a valid unexpired
+                license. Assignment creation will be rejected.
               </div>
             ) : null}
 
