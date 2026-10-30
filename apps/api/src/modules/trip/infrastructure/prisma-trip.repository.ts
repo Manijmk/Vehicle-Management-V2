@@ -499,6 +499,46 @@ export class PrismaTripRepository implements TripRepository {
         isDriverEligible: isEligible,
       });
 
+      // Milestone 7: Vehicle Maintenance Gate
+      const blockingRequest = await tx.maintenanceRequest.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          vehicleId: trip.vehicleId,
+          status: 'OPEN',
+          blocksOperation: true,
+        },
+      });
+      if (blockingRequest) {
+        throw new ApplicationError(
+          'VEHICLE_BLOCKED_BY_MAINTENANCE',
+          'Vehicle is operationally blocked by an open maintenance request',
+        );
+      }
+
+      const blockingWorkOrder = await tx.maintenanceWorkOrder.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          vehicleId: trip.vehicleId,
+          status: { in: ['DRAFT', 'OPEN', 'IN_PROGRESS'] },
+          blocksOperation: true,
+        },
+      });
+      if (blockingWorkOrder) {
+        throw new ApplicationError(
+          'VEHICLE_BLOCKED_BY_MAINTENANCE',
+          'Vehicle is operationally blocked by an active maintenance work order',
+        );
+      }
+
+      // Milestone 8: Operational Compliance Gate (Vehicle & Driver)
+      await this.assertVehicleAndDriverCompliance(
+        tx,
+        input.organizationId,
+        trip.vehicleId,
+        trip.driverId,
+        new Date(),
+      );
+
       const updateResult = await tx.trip.updateMany({
         where: {
           id: input.tripId,
@@ -592,6 +632,46 @@ export class PrismaTripRepository implements TripRepository {
         driverStatus: trip.driver.status,
         isDriverEligible: isEligible,
       });
+
+      // Milestone 7: Vehicle Maintenance Gate
+      const blockingRequest = await tx.maintenanceRequest.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          vehicleId: trip.vehicleId,
+          status: 'OPEN',
+          blocksOperation: true,
+        },
+      });
+      if (blockingRequest) {
+        throw new ApplicationError(
+          'VEHICLE_BLOCKED_BY_MAINTENANCE',
+          'Vehicle is operationally blocked by an open maintenance request',
+        );
+      }
+
+      const blockingWorkOrder = await tx.maintenanceWorkOrder.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          vehicleId: trip.vehicleId,
+          status: { in: ['DRAFT', 'OPEN', 'IN_PROGRESS'] },
+          blocksOperation: true,
+        },
+      });
+      if (blockingWorkOrder) {
+        throw new ApplicationError(
+          'VEHICLE_BLOCKED_BY_MAINTENANCE',
+          'Vehicle is operationally blocked by an active maintenance work order',
+        );
+      }
+
+      // Milestone 8: Operational Compliance Gate (Vehicle & Driver re-validation at START)
+      await this.assertVehicleAndDriverCompliance(
+        tx,
+        input.organizationId,
+        trip.vehicleId,
+        trip.driverId,
+        new Date(),
+      );
 
       // Milestone 6: Pre-Trip Inspection Gate
       const latestPreTrip = await tx.inspection.findFirst({
@@ -1254,5 +1334,93 @@ export class PrismaTripRepository implements TripRepository {
       },
     });
     return count > 0;
+  }
+
+  private async assertVehicleAndDriverCompliance(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    vehicleId: string,
+    driverId: string,
+    now: Date,
+  ): Promise<void> {
+    const referenceDateOnly = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0),
+    );
+
+    // 1. Vehicle Compliance Gate
+    const blockingVehicleTypes = await tx.complianceDocumentType.findMany({
+      where: {
+        organizationId,
+        subjectType: 'VEHICLE',
+        status: 'ACTIVE',
+        blocksOperation: true,
+      },
+    });
+
+    if (blockingVehicleTypes.length > 0) {
+      const activeDocs = await tx.complianceDocument.findMany({
+        where: {
+          organizationId,
+          vehicleId,
+          status: 'ACTIVE',
+          documentTypeId: { in: blockingVehicleTypes.map((t) => t.id) },
+        },
+      });
+      const docMap = new Map(activeDocs.map((d) => [d.documentTypeId, d]));
+
+      for (const bt of blockingVehicleTypes) {
+        const doc = docMap.get(bt.id);
+        if (!doc) {
+          throw new ApplicationError(
+            'VEHICLE_COMPLIANCE_BLOCKED',
+            `Vehicle is operationally blocked by compliance: missing required '${bt.name}' (${bt.code})`,
+          );
+        }
+        if (doc.expiresOn && doc.expiresOn < referenceDateOnly) {
+          throw new ApplicationError(
+            'VEHICLE_COMPLIANCE_BLOCKED',
+            `Vehicle is operationally blocked by compliance: expired '${bt.name}' (${bt.code})`,
+          );
+        }
+      }
+    }
+
+    // 2. Driver Compliance Gate
+    const blockingDriverTypes = await tx.complianceDocumentType.findMany({
+      where: {
+        organizationId,
+        subjectType: 'DRIVER',
+        status: 'ACTIVE',
+        blocksOperation: true,
+      },
+    });
+
+    if (blockingDriverTypes.length > 0) {
+      const activeDocs = await tx.complianceDocument.findMany({
+        where: {
+          organizationId,
+          driverId,
+          status: 'ACTIVE',
+          documentTypeId: { in: blockingDriverTypes.map((t) => t.id) },
+        },
+      });
+      const docMap = new Map(activeDocs.map((d) => [d.documentTypeId, d]));
+
+      for (const bt of blockingDriverTypes) {
+        const doc = docMap.get(bt.id);
+        if (!doc) {
+          throw new ApplicationError(
+            'DRIVER_COMPLIANCE_BLOCKED',
+            `Driver is operationally blocked by compliance: missing required '${bt.name}' (${bt.code})`,
+          );
+        }
+        if (doc.expiresOn && doc.expiresOn < referenceDateOnly) {
+          throw new ApplicationError(
+            'DRIVER_COMPLIANCE_BLOCKED',
+            `Driver is operationally blocked by compliance: expired '${bt.name}' (${bt.code})`,
+          );
+        }
+      }
+    }
   }
 }

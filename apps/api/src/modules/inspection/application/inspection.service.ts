@@ -78,4 +78,3 @@ export class InspectionService {
     return this.repository.getInspectionsForDriver(organizationId, driverId, limit, offset);
   }
 }
-

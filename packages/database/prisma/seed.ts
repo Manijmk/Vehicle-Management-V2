@@ -58,6 +58,32 @@ export const permissionDefinitions = [
   ['inspection.history.read', 'Read inspection history'],
   ['inspection.template.read', 'Read inspection templates'],
   ['inspection.template.manage', 'Create, update, activate, and archive inspection templates'],
+  ['maintenance.read', 'Read maintenance requests, work orders, schedules, and vendors'],
+  ['maintenance.request.create', 'Create maintenance requests'],
+  ['maintenance.request.manage', 'Update, cancel, or convert maintenance requests'],
+  ['maintenance.work-order.create', 'Create maintenance work orders'],
+  ['maintenance.work-order.manage', 'Manage work orders, tasks, parts, and labor'],
+  ['maintenance.plan.read', 'Read preventive maintenance plans'],
+  ['maintenance.plan.manage', 'Create, update, activate, and archive maintenance plans'],
+  ['maintenance.vendor.read', 'Read maintenance vendors'],
+  ['maintenance.vendor.manage', 'Create, update, and manage maintenance vendors'],
+  ['maintenance.cost.read', 'Read maintenance parts and labor cost details'],
+  ['compliance.read', 'Read compliance status, summaries, and documents metadata'],
+  ['compliance.document.upload', 'Upload compliance documents'],
+  ['compliance.document.manage', 'Replace or revoke compliance documents'],
+  ['compliance.document.download', 'Download sensitive compliance document files'],
+  ['compliance.type.read', 'Read compliance document types'],
+  ['compliance.type.manage', 'Create, update, and archive compliance document types'],
+  ['finance.read', 'Read finance summaries, fuel transactions, and expenses'],
+  ['fuel.read', 'Read fuel transactions and anomalies'],
+  ['fuel.create', 'Create manual fuel transactions'],
+  ['fuel.manage', 'Void fuel transactions and manage fuel records'],
+  ['fuel.import', 'Import fuel transactions via CSV'],
+  ['expense.read', 'Read expense records and categories'],
+  ['expense.create', 'Create expense records'],
+  ['expense.manage', 'Post, void, and manage expense records'],
+  ['expense.category.manage', 'Create and archive expense categories'],
+  ['finance.receipt.download', 'Download finance receipt attachments'],
 ] as const;
 
 async function seed(): Promise<void> {
@@ -173,6 +199,14 @@ async function seed(): Promise<void> {
       'inspection.read',
       'inspection.history.read',
       'inspection.template.read',
+      'maintenance.read',
+      'maintenance.plan.read',
+      'maintenance.vendor.read',
+      'compliance.read',
+      'compliance.type.read',
+      'finance.read',
+      'fuel.read',
+      'expense.read',
     ];
     await database.rolePermission.createMany({
       data: viewerCodes.map((code) => ({
@@ -344,6 +378,188 @@ async function seed(): Promise<void> {
         },
       },
     });
+
+    // Default Seeded Optional / Non-blocking Compliance Document Types
+    await database.complianceDocumentType.upsert({
+      where: {
+        organizationId_code: {
+          organizationId: developmentSeed.organizationId,
+          code: 'VEHICLE_REGISTRATION',
+        },
+      },
+      update: {},
+      create: {
+        id: '70000000-0000-4000-8000-000000000001',
+        organizationId: developmentSeed.organizationId,
+        code: 'VEHICLE_REGISTRATION',
+        name: 'Vehicle Registration',
+        description: 'Official department of motor vehicles registration certificate',
+        subjectType: 'VEHICLE',
+        status: 'ACTIVE',
+        required: false,
+        blocksOperation: false,
+        requiresExpiry: true,
+        warningDaysBeforeExpiry: 30,
+        version: 1,
+        createdBy: developmentSeed.userId,
+        updatedBy: developmentSeed.userId,
+      },
+    });
+
+    await database.complianceDocumentType.upsert({
+      where: {
+        organizationId_code: {
+          organizationId: developmentSeed.organizationId,
+          code: 'VEHICLE_INSURANCE',
+        },
+      },
+      update: {},
+      create: {
+        id: '70000000-0000-4000-8000-000000000002',
+        organizationId: developmentSeed.organizationId,
+        code: 'VEHICLE_INSURANCE',
+        name: 'Commercial Fleet Insurance',
+        description: 'Comprehensive commercial liability insurance policy',
+        subjectType: 'VEHICLE',
+        status: 'ACTIVE',
+        required: false,
+        blocksOperation: false,
+        requiresExpiry: true,
+        warningDaysBeforeExpiry: 30,
+        version: 1,
+        createdBy: developmentSeed.userId,
+        updatedBy: developmentSeed.userId,
+      },
+    });
+
+    await database.complianceDocumentType.upsert({
+      where: {
+        organizationId_code: {
+          organizationId: developmentSeed.organizationId,
+          code: 'DRIVER_MEDICAL_CERTIFICATE',
+        },
+      },
+      update: {},
+      create: {
+        id: '70000000-0000-4000-8000-000000000003',
+        organizationId: developmentSeed.organizationId,
+        code: 'DRIVER_MEDICAL_CERTIFICATE',
+        name: 'Driver Medical Examination Report',
+        description: 'Periodic medical fitness certificate issued by certified examiner',
+        subjectType: 'DRIVER',
+        status: 'ACTIVE',
+        required: false,
+        blocksOperation: false,
+        requiresExpiry: true,
+        warningDaysBeforeExpiry: 30,
+        version: 1,
+        createdBy: developmentSeed.userId,
+        updatedBy: developmentSeed.userId,
+      },
+    });
+
+    await database.complianceDocumentType.upsert({
+      where: {
+        organizationId_code: {
+          organizationId: developmentSeed.organizationId,
+          code: 'DRIVER_TRAINING_CERTIFICATE',
+        },
+      },
+      update: {},
+      create: {
+        id: '70000000-0000-4000-8000-000000000004',
+        organizationId: developmentSeed.organizationId,
+        code: 'DRIVER_TRAINING_CERTIFICATE',
+        name: 'Defensive Driver Training Certificate',
+        description: 'Certificate verifying completion of annual defensive driving training',
+        subjectType: 'DRIVER',
+        status: 'ACTIVE',
+        required: false,
+        blocksOperation: false,
+        requiresExpiry: false,
+        warningDaysBeforeExpiry: 0,
+        version: 1,
+        createdBy: developmentSeed.userId,
+        updatedBy: developmentSeed.userId,
+      },
+    });
+
+    const defaultExpenseCategories = [
+      { code: 'TOLL', name: 'Toll Charges', description: 'Highway and bridge tolls' },
+      {
+        code: 'PARKING',
+        name: 'Parking Fees',
+        description: 'Parking tickets, meters, and garage fees',
+      },
+      {
+        code: 'MAINTENANCE',
+        name: 'Routine Maintenance',
+        description: 'Scheduled servicing and routine upkeep',
+      },
+      {
+        code: 'REPAIR',
+        name: 'Vehicle Repairs',
+        description: 'Unscheduled and mechanical repairs',
+      },
+      {
+        code: 'INSURANCE',
+        name: 'Insurance Premium',
+        description: 'Fleet and commercial insurance',
+      },
+      {
+        code: 'REGISTRATION',
+        name: 'Vehicle Registration',
+        description: 'Registration fees, licenses, and permits',
+      },
+      {
+        code: 'FINE',
+        name: 'Traffic Violations & Fines',
+        description: 'Speeding, parking fines, and legal citations',
+      },
+      {
+        code: 'LEASE',
+        name: 'Vehicle Lease Payments',
+        description: 'Monthly lease or financing payments',
+      },
+      {
+        code: 'TYRES',
+        name: 'Tyres & Wheels',
+        description: 'Tyre replacements, repairs, and wheel alignments',
+      },
+      {
+        code: 'CLEANING',
+        name: 'Vehicle Cleaning',
+        description: 'Car wash, detailing, and interior cleaning',
+      },
+      { code: 'OTHER', name: 'Other Expenses', description: 'Miscellaneous operational expenses' },
+    ];
+
+    for (const [index, cat] of defaultExpenseCategories.entries()) {
+      const id = `80000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+      await database.expenseCategory.upsert({
+        where: {
+          organizationId_code: {
+            organizationId: developmentSeed.organizationId,
+            code: cat.code,
+          },
+        },
+        update: {
+          name: cat.name,
+          description: cat.description,
+        },
+        create: {
+          id,
+          organizationId: developmentSeed.organizationId,
+          code: cat.code,
+          name: cat.name,
+          description: cat.description,
+          status: 'ACTIVE',
+          version: 1,
+          createdBy: developmentSeed.userId,
+          updatedBy: developmentSeed.userId,
+        },
+      });
+    }
   } finally {
     await database.$disconnect();
   }

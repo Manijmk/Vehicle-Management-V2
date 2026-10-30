@@ -51,53 +51,90 @@ enum FuelType {
 }
 
 model Organization {
-  id                       String                    @id @default(uuid()) @db.Uuid
-  name                     String                    @db.VarChar(200)
-  slug                     String                    @unique @db.VarChar(100)
-  status                   PrincipalStatus           @default(ACTIVE)
-  version                  Int                       @default(1)
-  createdAt                DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  memberships              OrganizationMembership[]
-  roles                    Role[]
-  auditLogs                AuditLog[]
-  outboxEvents             OutboxEvent[]
-  vehicles                 Vehicle[]
-  vehicleStatusHistory     VehicleStatusHistory[]
-  drivers                  Driver[]
-  driverLicenses           DriverLicense[]
-  driverStatusHistory      DriverStatusHistory[]
-  vehicleDriverAssignments VehicleDriverAssignment[]
-  trips                    Trip[]
-  tripStatusHistory        TripStatusHistory[]
-  inspectionTemplates      InspectionTemplate[]
-  inspectionTemplateItems  InspectionTemplateItem[]
-  inspections              Inspection[]
-  inspectionResponses      InspectionResponse[]
+  id                          String                       @id @default(uuid()) @db.Uuid
+  name                        String                       @db.VarChar(200)
+  slug                        String                       @unique @db.VarChar(100)
+  status                      PrincipalStatus              @default(ACTIVE)
+  version                     Int                          @default(1)
+  createdAt                   DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  memberships                 OrganizationMembership[]
+  roles                       Role[]
+  auditLogs                   AuditLog[]
+  outboxEvents                OutboxEvent[]
+  vehicles                    Vehicle[]
+  vehicleStatusHistory        VehicleStatusHistory[]
+  drivers                     Driver[]
+  driverLicenses              DriverLicense[]
+  driverStatusHistory         DriverStatusHistory[]
+  vehicleDriverAssignments    VehicleDriverAssignment[]
+  trips                       Trip[]
+  tripStatusHistory           TripStatusHistory[]
+  inspectionTemplates         InspectionTemplate[]
+  inspectionTemplateItems     InspectionTemplateItem[]
+  inspections                 Inspection[]
+  inspectionResponses         InspectionResponse[]
+  maintenanceRequests         MaintenanceRequest[]
+  maintenancePlans            MaintenancePlan[]
+  vehicleMaintenanceSchedules VehicleMaintenanceSchedule[]
+  maintenanceVendors          MaintenanceVendor[]
+  maintenanceWorkOrders       MaintenanceWorkOrder[]
+  maintenanceWorkOrderTasks   MaintenanceWorkOrderTask[]
+  maintenanceWorkOrderParts   MaintenanceWorkOrderPart[]
+  maintenanceWorkOrderLabor   MaintenanceWorkOrderLabor[]
+  complianceDocumentTypes     ComplianceDocumentType[]
+  complianceDocuments         ComplianceDocument[]
+  fuelTransactions            FuelTransaction[]
+  fuelTransactionAnomalies    FuelTransactionAnomaly[]
+  expenseCategories           ExpenseCategory[]
+  expenses                    Expense[]
+  fuelImportJobs              FuelImportJob[]
 
   @@map("organizations")
 }
 
 model User {
-  id                         String                   @id @default(uuid()) @db.Uuid
-  email                      String                   @unique @db.VarChar(320)
-  displayName                String                   @map("display_name") @db.VarChar(200)
-  status                     PrincipalStatus          @default(ACTIVE)
-  version                    Int                      @default(1)
-  createdAt                  DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                  DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
-  memberships                OrganizationMembership[]
-  auditLogs                  AuditLog[]
-  vehicleStatusHistory       VehicleStatusHistory[]
-  driverStatusHistory        DriverStatusHistory[]
-  tripsCreated               Trip[]                   @relation("TripCreatedBy")
-  tripsUpdated               Trip[]                   @relation("TripUpdatedBy")
-  tripStatusHistory          TripStatusHistory[]
-  inspectionTemplatesCreated InspectionTemplate[]     @relation("InspectionTemplateCreatedBy")
-  inspectionTemplatesUpdated InspectionTemplate[]     @relation("InspectionTemplateUpdatedBy")
-  inspectionsCreated         Inspection[]             @relation("InspectionCreatedBy")
-  inspectionsUpdated         Inspection[]             @relation("InspectionUpdatedBy")
-  inspectionsPerformed       Inspection[]             @relation("InspectionPerformedBy")
+  id                           String                   @id @default(uuid()) @db.Uuid
+  email                        String                   @unique @db.VarChar(320)
+  displayName                  String                   @map("display_name") @db.VarChar(200)
+  status                       PrincipalStatus          @default(ACTIVE)
+  version                      Int                      @default(1)
+  createdAt                    DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                    DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  memberships                  OrganizationMembership[]
+  auditLogs                    AuditLog[]
+  vehicleStatusHistory         VehicleStatusHistory[]
+  driverStatusHistory          DriverStatusHistory[]
+  tripsCreated                 Trip[]                   @relation("TripCreatedBy")
+  tripsUpdated                 Trip[]                   @relation("TripUpdatedBy")
+  tripStatusHistory            TripStatusHistory[]
+  inspectionTemplatesCreated   InspectionTemplate[]     @relation("InspectionTemplateCreatedBy")
+  inspectionTemplatesUpdated   InspectionTemplate[]     @relation("InspectionTemplateUpdatedBy")
+  inspectionsCreated           Inspection[]             @relation("InspectionCreatedBy")
+  inspectionsUpdated           Inspection[]             @relation("InspectionUpdatedBy")
+  inspectionsPerformed         Inspection[]             @relation("InspectionPerformedBy")
+  maintenanceRequestsCreated   MaintenanceRequest[]     @relation("MaintenanceRequestCreatedBy")
+  maintenanceRequestsUpdated   MaintenanceRequest[]     @relation("MaintenanceRequestUpdatedBy")
+  maintenancePlansCreated      MaintenancePlan[]        @relation("MaintenancePlanCreatedBy")
+  maintenancePlansUpdated      MaintenancePlan[]        @relation("MaintenancePlanUpdatedBy")
+  maintenanceVendorsCreated    MaintenanceVendor[]      @relation("MaintenanceVendorCreatedBy")
+  maintenanceVendorsUpdated    MaintenanceVendor[]      @relation("MaintenanceVendorUpdatedBy")
+  maintenanceWorkOrdersCreated MaintenanceWorkOrder[]   @relation("MaintenanceWorkOrderCreatedBy")
+  maintenanceWorkOrdersUpdated MaintenanceWorkOrder[]   @relation("MaintenanceWorkOrderUpdatedBy")
+  complianceDocTypesCreated    ComplianceDocumentType[] @relation("ComplianceDocTypeCreatedBy")
+  complianceDocTypesUpdated    ComplianceDocumentType[] @relation("ComplianceDocTypeUpdatedBy")
+  complianceDocsCreated        ComplianceDocument[]     @relation("ComplianceDocCreatedBy")
+  complianceDocsUpdated        ComplianceDocument[]     @relation("ComplianceDocUpdatedBy")
+  complianceDocsRevoked        ComplianceDocument[]     @relation("ComplianceDocRevokedBy")
+  fuelTransactionsCreated      FuelTransaction[]        @relation("FuelTransactionCreatedBy")
+  fuelTransactionsUpdated      FuelTransaction[]        @relation("FuelTransactionUpdatedBy")
+  fuelTransactionsVoided       FuelTransaction[]        @relation("FuelTransactionVoidedBy")
+  expenseCategoriesCreated     ExpenseCategory[]        @relation("ExpenseCategoryCreatedBy")
+  expenseCategoriesUpdated     ExpenseCategory[]        @relation("ExpenseCategoryUpdatedBy")
+  expensesCreated              Expense[]                @relation("ExpenseCreatedBy")
+  expensesUpdated              Expense[]                @relation("ExpenseUpdatedBy")
+  expensesVoided               Expense[]                @relation("ExpenseVoidedBy")
+  fuelImportJobsCreated        FuelImportJob[]          @relation("FuelImportJobCreatedBy")
 
   @@map("users")
 }
@@ -219,26 +256,32 @@ model OutboxEvent {
 }
 
 model Vehicle {
-  id             String                    @id @default(uuid()) @db.Uuid
-  organizationId String                    @map("organization_id") @db.Uuid
-  displayId      String                    @map("display_id") @db.VarChar(40)
-  registration   String                    @db.VarChar(30)
-  vin            String                    @unique @db.VarChar(17)
-  type           VehicleType
-  fuelType       FuelType                  @map("fuel_type")
-  model          String                    @db.VarChar(100)
-  year           Int
-  odometerKm     Int                       @map("odometer_km")
-  status         VehicleStatus             @default(DRAFT)
-  notes          String?                   @db.VarChar(500)
-  version        Int                       @default(1)
-  createdAt      DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  statusHistory  VehicleStatusHistory[]
-  assignments    VehicleDriverAssignment[]
-  trips          Trip[]
-  inspections    Inspection[]
+  id                    String                       @id @default(uuid()) @db.Uuid
+  organizationId        String                       @map("organization_id") @db.Uuid
+  displayId             String                       @map("display_id") @db.VarChar(40)
+  registration          String                       @db.VarChar(30)
+  vin                   String                       @unique @db.VarChar(17)
+  type                  VehicleType
+  fuelType              FuelType                     @map("fuel_type")
+  model                 String                       @db.VarChar(100)
+  year                  Int
+  odometerKm            Int                          @map("odometer_km")
+  status                VehicleStatus                @default(DRAFT)
+  notes                 String?                      @db.VarChar(500)
+  version               Int                          @default(1)
+  createdAt             DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization          Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  statusHistory         VehicleStatusHistory[]
+  assignments           VehicleDriverAssignment[]
+  trips                 Trip[]
+  inspections           Inspection[]
+  maintenanceRequests   MaintenanceRequest[]
+  maintenanceSchedules  VehicleMaintenanceSchedule[]
+  maintenanceWorkOrders MaintenanceWorkOrder[]
+  complianceDocuments   ComplianceDocument[]
+  fuelTransactions      FuelTransaction[]
+  expenses              Expense[]
 
   @@unique([organizationId, displayId])
   @@unique([organizationId, registration])
@@ -276,25 +319,28 @@ enum DriverStatus {
 }
 
 model Driver {
-  id             String                    @id @default(uuid()) @db.Uuid
-  organizationId String                    @map("organization_id") @db.Uuid
-  displayId      String                    @map("display_id") @db.VarChar(40)
-  employeeNumber String?                   @map("employee_number") @db.VarChar(50)
-  firstName      String                    @map("first_name") @db.VarChar(100)
-  lastName       String                    @map("last_name") @db.VarChar(100)
-  email          String?                   @db.VarChar(320)
-  phone          String?                   @db.VarChar(50)
-  status         DriverStatus              @default(DRAFT)
-  notes          String?                   @db.VarChar(500)
-  version        Int                       @default(1)
-  createdAt      DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  licenses       DriverLicense[]
-  statusHistory  DriverStatusHistory[]
-  assignments    VehicleDriverAssignment[]
-  trips          Trip[]
-  inspections    Inspection[]
+  id                  String                    @id @default(uuid()) @db.Uuid
+  organizationId      String                    @map("organization_id") @db.Uuid
+  displayId           String                    @map("display_id") @db.VarChar(40)
+  employeeNumber      String?                   @map("employee_number") @db.VarChar(50)
+  firstName           String                    @map("first_name") @db.VarChar(100)
+  lastName            String                    @map("last_name") @db.VarChar(100)
+  email               String?                   @db.VarChar(320)
+  phone               String?                   @db.VarChar(50)
+  status              DriverStatus              @default(DRAFT)
+  notes               String?                   @db.VarChar(500)
+  version             Int                       @default(1)
+  createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization        Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  licenses            DriverLicense[]
+  statusHistory       DriverStatusHistory[]
+  assignments         VehicleDriverAssignment[]
+  trips               Trip[]
+  inspections         Inspection[]
+  complianceDocuments ComplianceDocument[]
+  fuelTransactions    FuelTransaction[]
+  expenses            Expense[]
 
   @@unique([organizationId, displayId])
   @@unique([organizationId, employeeNumber])
@@ -417,14 +463,16 @@ model Trip {
   updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
   updatedBy       String     @map("updated_by") @db.Uuid
 
-  organization  Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  assignment    VehicleDriverAssignment @relation(fields: [assignmentId, organizationId, vehicleId, driverId], references: [id, organizationId, vehicleId, driverId], onDelete: Restrict)
-  vehicle       Vehicle                 @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  driver        Driver                  @relation(fields: [driverId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  createdByUser User                    @relation("TripCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
-  updatedByUser User                    @relation("TripUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
-  statusHistory TripStatusHistory[]
-  inspections   Inspection[]
+  organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  assignment       VehicleDriverAssignment @relation(fields: [assignmentId, organizationId, vehicleId, driverId], references: [id, organizationId, vehicleId, driverId], onDelete: Restrict)
+  vehicle          Vehicle                 @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  driver           Driver                  @relation(fields: [driverId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdByUser    User                    @relation("TripCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser    User                    @relation("TripUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  statusHistory    TripStatusHistory[]
+  inspections      Inspection[]
+  fuelTransactions FuelTransaction[]
+  expenses         Expense[]
 
   @@unique([organizationId, displayId])
   @@unique([id, organizationId])
@@ -567,16 +615,17 @@ model Inspection {
   updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
   updatedBy          String            @map("updated_by") @db.Uuid
 
-  organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  template        InspectionTemplate       @relation(fields: [templateId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  vehicle         Vehicle                  @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  driver          Driver?                  @relation(fields: [driverId], references: [id], onDelete: Restrict)
-  assignment      VehicleDriverAssignment? @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
-  trip            Trip?                    @relation(fields: [tripId], references: [id], onDelete: Restrict)
-  createdByUser   User                     @relation("InspectionCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
-  updatedByUser   User                     @relation("InspectionUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
-  performedByUser User?                    @relation("InspectionPerformedBy", fields: [performedBy], references: [id], onDelete: Restrict)
-  responses       InspectionResponse[]
+  organization        Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  template            InspectionTemplate       @relation(fields: [templateId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  vehicle             Vehicle                  @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  driver              Driver?                  @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  assignment          VehicleDriverAssignment? @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  trip                Trip?                    @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  createdByUser       User                     @relation("InspectionCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser       User                     @relation("InspectionUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  performedByUser     User?                    @relation("InspectionPerformedBy", fields: [performedBy], references: [id], onDelete: Restrict)
+  responses           InspectionResponse[]
+  maintenanceRequests MaintenanceRequest[]
 
   @@unique([organizationId, displayId])
   @@unique([id, organizationId])
@@ -608,4 +657,590 @@ model InspectionResponse {
   @@unique([organizationId, inspectionId, templateItemId])
   @@index([organizationId, inspectionId])
   @@map("inspection_responses")
+}
+
+enum MaintenanceRequestSource {
+  MANUAL
+  INSPECTION
+  PREVENTIVE
+}
+
+enum MaintenancePriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum MaintenanceRequestStatus {
+  OPEN
+  CONVERTED
+  CANCELLED
+}
+
+enum MaintenanceWorkOrderStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum MaintenancePlanStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum MaintenanceVendorStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum WorkOrderTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+model MaintenanceRequest {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  organizationId       String                   @map("organization_id") @db.Uuid
+  displayId            String                   @map("display_id") @db.VarChar(40)
+  vehicleId            String                   @map("vehicle_id") @db.Uuid
+  sourceType           MaintenanceRequestSource @map("source_type")
+  sourceInspectionId   String?                  @map("source_inspection_id") @db.Uuid
+  title                String                   @db.VarChar(200)
+  description          String?                  @db.VarChar(1000)
+  priority             MaintenancePriority      @default(NORMAL)
+  blocksOperation      Boolean                  @default(false) @map("blocks_operation")
+  status               MaintenanceRequestStatus @default(OPEN)
+  convertedWorkOrderId String?                  @map("converted_work_order_id") @db.Uuid
+  version              Int                      @default(1)
+  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy            String                   @map("created_by") @db.Uuid
+  updatedAt            DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedBy            String                   @map("updated_by") @db.Uuid
+
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  vehicle            Vehicle                @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  sourceInspection   Inspection?            @relation(fields: [sourceInspectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  convertedWorkOrder MaintenanceWorkOrder?  @relation("RequestConvertedWorkOrder", fields: [convertedWorkOrderId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdByUser      User                   @relation("MaintenanceRequestCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser      User                   @relation("MaintenanceRequestUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  workOrders         MaintenanceWorkOrder[] @relation("RequestWorkOrders")
+
+  @@unique([organizationId, displayId])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, vehicleId, status])
+  @@index([organizationId, status, priority])
+  @@index([organizationId, sourceInspectionId])
+  @@map("maintenance_requests")
+}
+
+model MaintenancePlan {
+  id                     String                @id @default(uuid()) @db.Uuid
+  organizationId         String                @map("organization_id") @db.Uuid
+  displayId              String                @map("display_id") @db.VarChar(40)
+  name                   String                @db.VarChar(200)
+  description            String?               @db.VarChar(500)
+  status                 MaintenancePlanStatus @default(DRAFT)
+  intervalDays           Int?                  @map("interval_days")
+  intervalOdometerKm     Int?                  @map("interval_odometer_km")
+  defaultPriority        MaintenancePriority   @default(NORMAL) @map("default_priority")
+  blocksOperationWhenDue Boolean               @default(false) @map("blocks_operation_when_due")
+  version                Int                   @default(1)
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy              String                @map("created_by") @db.Uuid
+  updatedAt              DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedBy              String                @map("updated_by") @db.Uuid
+
+  organization  Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdByUser User                         @relation("MaintenancePlanCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser User                         @relation("MaintenancePlanUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  schedules     VehicleMaintenanceSchedule[]
+
+  @@unique([organizationId, displayId])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@map("maintenance_plans")
+}
+
+model VehicleMaintenanceSchedule {
+  id                      String    @id @default(uuid()) @db.Uuid
+  organizationId          String    @map("organization_id") @db.Uuid
+  vehicleId               String    @map("vehicle_id") @db.Uuid
+  maintenancePlanId       String    @map("maintenance_plan_id") @db.Uuid
+  lastCompletedAt         DateTime? @map("last_completed_at") @db.Timestamptz(3)
+  lastCompletedOdometerKm Int?      @map("last_completed_odometer_km")
+  nextDueAt               DateTime? @map("next_due_at") @db.Timestamptz(3)
+  nextDueOdometerKm       Int?      @map("next_due_odometer_km")
+  version                 Int       @default(1)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy               String    @map("created_by") @db.Uuid
+  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedBy               String    @map("updated_by") @db.Uuid
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  vehicle      Vehicle                @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  plan         MaintenancePlan        @relation(fields: [maintenancePlanId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  workOrders   MaintenanceWorkOrder[]
+
+  @@unique([organizationId, vehicleId, maintenancePlanId])
+  @@unique([id, organizationId])
+  @@index([organizationId, vehicleId])
+  @@index([organizationId, nextDueAt])
+  @@index([organizationId, nextDueOdometerKm])
+  @@map("vehicle_maintenance_schedules")
+}
+
+model MaintenanceVendor {
+  id             String                  @id @default(uuid()) @db.Uuid
+  organizationId String                  @map("organization_id") @db.Uuid
+  displayId      String                  @map("display_id") @db.VarChar(40)
+  name           String                  @db.VarChar(200)
+  contactName    String?                 @map("contact_name") @db.VarChar(200)
+  phone          String?                 @db.VarChar(50)
+  email          String?                 @db.VarChar(200)
+  notes          String?                 @db.VarChar(500)
+  status         MaintenanceVendorStatus @default(ACTIVE)
+  version        Int                     @default(1)
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy      String                  @map("created_by") @db.Uuid
+  updatedAt      DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedBy      String                  @map("updated_by") @db.Uuid
+
+  organization  Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdByUser User                   @relation("MaintenanceVendorCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser User                   @relation("MaintenanceVendorUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  workOrders    MaintenanceWorkOrder[]
+
+  @@unique([organizationId, displayId])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@map("maintenance_vendors")
+}
+
+model MaintenanceWorkOrder {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  organizationId        String                     @map("organization_id") @db.Uuid
+  displayId             String                     @map("display_id") @db.VarChar(40)
+  vehicleId             String                     @map("vehicle_id") @db.Uuid
+  maintenanceRequestId  String?                    @map("maintenance_request_id") @db.Uuid
+  maintenanceScheduleId String?                    @map("maintenance_schedule_id") @db.Uuid
+  vendorId              String?                    @map("vendor_id") @db.Uuid
+  title                 String                     @db.VarChar(200)
+  description           String?                    @db.VarChar(1000)
+  priority              MaintenancePriority        @default(NORMAL)
+  blocksOperation       Boolean                    @default(false) @map("blocks_operation")
+  status                MaintenanceWorkOrderStatus @default(DRAFT)
+  openedAt              DateTime?                  @map("opened_at") @db.Timestamptz(3)
+  startedAt             DateTime?                  @map("started_at") @db.Timestamptz(3)
+  completedAt           DateTime?                  @map("completed_at") @db.Timestamptz(3)
+  cancelledAt           DateTime?                  @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason          String?                    @map("cancel_reason") @db.VarChar(500)
+  completionNotes       String?                    @map("completion_notes") @db.VarChar(1000)
+  odometerAtOpen        Int?                       @map("odometer_at_open")
+  odometerAtCompletion  Int?                       @map("odometer_at_completion")
+  version               Int                        @default(1)
+  createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy             String                     @map("created_by") @db.Uuid
+  updatedAt             DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedBy             String                     @map("updated_by") @db.Uuid
+
+  organization          Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  vehicle               Vehicle                     @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  request               MaintenanceRequest?         @relation("RequestWorkOrders", fields: [maintenanceRequestId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  schedule              VehicleMaintenanceSchedule? @relation(fields: [maintenanceScheduleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  vendor                MaintenanceVendor?          @relation(fields: [vendorId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  convertedFromRequests MaintenanceRequest[]        @relation("RequestConvertedWorkOrder")
+  createdByUser         User                        @relation("MaintenanceWorkOrderCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser         User                        @relation("MaintenanceWorkOrderUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  tasks                 MaintenanceWorkOrderTask[]
+  parts                 MaintenanceWorkOrderPart[]
+  labor                 MaintenanceWorkOrderLabor[]
+  expenses              Expense[]
+
+  @@unique([organizationId, displayId])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, vehicleId, status])
+  @@index([organizationId, maintenanceRequestId])
+  @@index([organizationId, maintenanceScheduleId])
+  @@map("maintenance_work_orders")
+}
+
+model MaintenanceWorkOrderTask {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  workOrderId    String              @map("work_order_id") @db.Uuid
+  description    String              @db.VarChar(500)
+  status         WorkOrderTaskStatus @default(PENDING)
+  sortOrder      Int                 @default(0) @map("sort_order")
+  notes          String?             @db.VarChar(500)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workOrder    MaintenanceWorkOrder @relation(fields: [workOrderId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, workOrderId, sortOrder])
+  @@map("maintenance_work_order_tasks")
+}
+
+model MaintenanceWorkOrderPart {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  workOrderId    String   @map("work_order_id") @db.Uuid
+  description    String   @db.VarChar(200)
+  partNumber     String?  @map("part_number") @db.VarChar(100)
+  quantity       Decimal  @db.Decimal(10, 2)
+  unitCost       Decimal  @map("unit_cost") @db.Decimal(10, 2)
+  totalCost      Decimal  @map("total_cost") @db.Decimal(10, 2)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workOrder    MaintenanceWorkOrder @relation(fields: [workOrderId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, workOrderId])
+  @@map("maintenance_work_order_parts")
+}
+
+model MaintenanceWorkOrderLabor {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  workOrderId    String   @map("work_order_id") @db.Uuid
+  description    String   @db.VarChar(200)
+  hours          Decimal  @db.Decimal(10, 2)
+  hourlyRate     Decimal  @map("hourly_rate") @db.Decimal(10, 2)
+  totalCost      Decimal  @map("total_cost") @db.Decimal(10, 2)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workOrder    MaintenanceWorkOrder @relation(fields: [workOrderId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, workOrderId])
+  @@map("maintenance_work_order_labor")
+}
+
+enum ComplianceSubjectType {
+  VEHICLE
+  DRIVER
+}
+
+enum ComplianceDocumentTypeStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ComplianceDocumentStatus {
+  ACTIVE
+  SUPERSEDED
+  REVOKED
+}
+
+model ComplianceDocumentType {
+  id                      String                       @id @default(uuid()) @db.Uuid
+  organizationId          String                       @map("organization_id") @db.Uuid
+  code                    String                       @db.VarChar(100)
+  name                    String                       @db.VarChar(200)
+  description             String?                      @db.VarChar(500)
+  subjectType             ComplianceSubjectType        @map("subject_type")
+  status                  ComplianceDocumentTypeStatus @default(ACTIVE)
+  required                Boolean                      @default(false)
+  blocksOperation         Boolean                      @default(false) @map("blocks_operation")
+  requiresExpiry          Boolean                      @default(false) @map("requires_expiry")
+  warningDaysBeforeExpiry Int                          @default(30) @map("warning_days_before_expiry")
+  version                 Int                          @default(1)
+  createdAt               DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy               String                       @map("created_by") @db.Uuid
+  updatedAt               DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedBy               String                       @map("updated_by") @db.Uuid
+
+  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdByUser User                 @relation("ComplianceDocTypeCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser User                 @relation("ComplianceDocTypeUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  documents     ComplianceDocument[]
+
+  @@unique([organizationId, code])
+  @@unique([id, organizationId])
+  @@unique([id, organizationId, subjectType])
+  @@index([organizationId, status])
+  @@index([organizationId, subjectType, status])
+  @@map("compliance_document_types")
+}
+
+model ComplianceDocument {
+  id               String                   @id @default(uuid()) @db.Uuid
+  organizationId   String                   @map("organization_id") @db.Uuid
+  displayId        String                   @map("display_id") @db.VarChar(40)
+  documentTypeId   String                   @map("document_type_id") @db.Uuid
+  subjectType      ComplianceSubjectType    @map("subject_type")
+  vehicleId        String?                  @map("vehicle_id") @db.Uuid
+  driverId         String?                  @map("driver_id") @db.Uuid
+  documentNumber   String?                  @map("document_number") @db.VarChar(100)
+  issuerName       String?                  @map("issuer_name") @db.VarChar(200)
+  issuedOn         DateTime?                @map("issued_on") @db.Date
+  expiresOn        DateTime?                @map("expires_on") @db.Date
+  status           ComplianceDocumentStatus @default(ACTIVE)
+  notes            String?                  @db.VarChar(1000)
+  objectKey        String                   @map("object_key") @db.VarChar(500)
+  originalFileName String                   @map("original_file_name") @db.VarChar(255)
+  mimeType         String                   @map("mime_type") @db.VarChar(100)
+  sizeBytes        Int                      @map("size_bytes")
+  storageETag      String?                  @map("storage_etag") @db.VarChar(100)
+  supersededAt     DateTime?                @map("superseded_at") @db.Timestamptz(3)
+  supersededById   String?                  @map("superseded_by_id") @db.Uuid
+  revokedAt        DateTime?                @map("revoked_at") @db.Timestamptz(3)
+  revokedBy        String?                  @map("revoked_by") @db.Uuid
+  revocationReason String?                  @map("revocation_reason") @db.VarChar(500)
+  version          Int                      @default(1)
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy        String                   @map("created_by") @db.Uuid
+  updatedAt        DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedBy        String                   @map("updated_by") @db.Uuid
+
+  organization  Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  documentType  ComplianceDocumentType @relation(fields: [documentTypeId, organizationId, subjectType], references: [id, organizationId, subjectType], onDelete: Restrict)
+  vehicle       Vehicle?               @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  driver        Driver?                @relation(fields: [driverId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdByUser User                   @relation("ComplianceDocCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser User                   @relation("ComplianceDocUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  revokedByUser User?                  @relation("ComplianceDocRevokedBy", fields: [revokedBy], references: [id], onDelete: Restrict)
+  supersededBy  ComplianceDocument?    @relation("DocumentSupersession", fields: [supersededById, organizationId], references: [id, organizationId], onDelete: Restrict)
+  supersedes    ComplianceDocument[]   @relation("DocumentSupersession")
+
+  @@unique([organizationId, displayId])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, subjectType, status])
+  @@index([organizationId, vehicleId, status])
+  @@index([organizationId, driverId, status])
+  @@index([organizationId, expiresOn])
+  @@index([organizationId, createdAt])
+  @@map("compliance_documents")
+}
+
+enum FuelQuantityUnit {
+  LITER
+  KWH
+  KG
+  GALLON
+}
+
+enum FuelTransactionSource {
+  MANUAL
+  CSV_IMPORT
+}
+
+enum FuelTransactionStatus {
+  POSTED
+  VOIDED
+}
+
+enum FuelAnomalyCode {
+  ODOMETER_REGRESSION
+  DUPLICATE_REFERENCE
+  DUPLICATE_TRANSACTION
+  FUTURE_TRANSACTION_DATE
+  ZERO_DISTANCE_REFUEL
+  UNUSUAL_UNIT_PRICE
+}
+
+enum FuelAnomalySeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum ExpenseCategoryStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ExpenseStatus {
+  DRAFT
+  POSTED
+  VOIDED
+}
+
+enum FuelImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model FuelTransaction {
+  id                 String                @id @default(uuid()) @db.Uuid
+  organizationId     String                @map("organization_id") @db.Uuid
+  displayId          String                @map("display_id") @db.VarChar(40)
+  vehicleId          String                @map("vehicle_id") @db.Uuid
+  driverId           String?               @map("driver_id") @db.Uuid
+  tripId             String?               @map("trip_id") @db.Uuid
+  occurredAt         DateTime              @map("occurred_at") @db.Timestamptz(3)
+  energyType         FuelType              @map("energy_type")
+  quantity           Decimal               @db.Decimal(12, 3)
+  quantityUnit       FuelQuantityUnit      @default(LITER) @map("quantity_unit")
+  unitPrice          Decimal               @map("unit_price") @db.Decimal(12, 4)
+  totalAmount        Decimal               @map("total_amount") @db.Decimal(12, 2)
+  currencyCode       String                @map("currency_code") @db.VarChar(3)
+  odometerKm         Int?                  @map("odometer_km")
+  stationName        String?               @map("station_name") @db.VarChar(200)
+  referenceNumber    String?               @map("reference_number") @db.VarChar(100)
+  source             FuelTransactionSource @default(MANUAL)
+  status             FuelTransactionStatus @default(POSTED)
+  voidReason         String?               @map("void_reason") @db.VarChar(500)
+  voidedAt           DateTime?             @map("voided_at") @db.Timestamptz(3)
+  voidedBy           String?               @map("voided_by") @db.Uuid
+  receiptStorageKey  String?               @map("receipt_storage_key") @db.VarChar(500)
+  receiptFileName    String?               @map("receipt_file_name") @db.VarChar(255)
+  receiptContentType String?               @map("receipt_content_type") @db.VarChar(100)
+  receiptSizeBytes   Int?                  @map("receipt_size_bytes")
+  importBatchId      String?               @map("import_batch_id") @db.Uuid
+  version            Int                   @default(1)
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy          String                @map("created_by") @db.Uuid
+  updatedAt          DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedBy          String                @map("updated_by") @db.Uuid
+
+  organization  Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  vehicle       Vehicle                  @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  driver        Driver?                  @relation(fields: [driverId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  trip          Trip?                    @relation(fields: [tripId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdByUser User                     @relation("FuelTransactionCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser User                     @relation("FuelTransactionUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  voidedByUser  User?                    @relation("FuelTransactionVoidedBy", fields: [voidedBy], references: [id], onDelete: Restrict)
+  anomalies     FuelTransactionAnomaly[]
+
+  @@unique([organizationId, displayId])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, vehicleId, occurredAt])
+  @@index([organizationId, driverId, occurredAt])
+  @@index([organizationId, tripId])
+  @@index([organizationId, referenceNumber])
+  @@index([organizationId, occurredAt])
+  @@map("fuel_transactions")
+}
+
+model FuelTransactionAnomaly {
+  id                String              @id @default(uuid()) @db.Uuid
+  organizationId    String              @map("organization_id") @db.Uuid
+  fuelTransactionId String              @map("fuel_transaction_id") @db.Uuid
+  code              FuelAnomalyCode
+  severity          FuelAnomalySeverity @default(WARNING)
+  description       String              @db.VarChar(500)
+  metadata          Json?
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  fuelTransaction FuelTransaction @relation(fields: [fuelTransactionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, fuelTransactionId])
+  @@index([organizationId, code])
+  @@map("fuel_transaction_anomalies")
+}
+
+model ExpenseCategory {
+  id             String                @id @default(uuid()) @db.Uuid
+  organizationId String                @map("organization_id") @db.Uuid
+  code           String                @db.VarChar(50)
+  name           String                @db.VarChar(100)
+  description    String?               @db.VarChar(500)
+  status         ExpenseCategoryStatus @default(ACTIVE)
+  version        Int                   @default(1)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy      String                @map("created_by") @db.Uuid
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedBy      String                @map("updated_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdByUser User         @relation("ExpenseCategoryCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser User         @relation("ExpenseCategoryUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  expenses      Expense[]
+
+  @@unique([organizationId, code])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@map("expense_categories")
+}
+
+model Expense {
+  id                     String        @id @default(uuid()) @db.Uuid
+  organizationId         String        @map("organization_id") @db.Uuid
+  displayId              String        @map("display_id") @db.VarChar(40)
+  categoryId             String        @map("category_id") @db.Uuid
+  vehicleId              String?       @map("vehicle_id") @db.Uuid
+  driverId               String?       @map("driver_id") @db.Uuid
+  tripId                 String?       @map("trip_id") @db.Uuid
+  maintenanceWorkOrderId String?       @map("maintenance_work_order_id") @db.Uuid
+  occurredAt             DateTime      @map("occurred_at") @db.Timestamptz(3)
+  description            String        @db.VarChar(500)
+  amount                 Decimal       @db.Decimal(12, 2)
+  currencyCode           String        @map("currency_code") @db.VarChar(3)
+  vendorName             String?       @map("vendor_name") @db.VarChar(200)
+  referenceNumber        String?       @map("reference_number") @db.VarChar(100)
+  status                 ExpenseStatus @default(DRAFT)
+  voidReason             String?       @map("void_reason") @db.VarChar(500)
+  voidedAt               DateTime?     @map("voided_at") @db.Timestamptz(3)
+  voidedBy               String?       @map("voided_by") @db.Uuid
+  receiptStorageKey      String?       @map("receipt_storage_key") @db.VarChar(500)
+  receiptFileName        String?       @map("receipt_file_name") @db.VarChar(255)
+  receiptContentType     String?       @map("receipt_content_type") @db.VarChar(100)
+  receiptSizeBytes       Int?          @map("receipt_size_bytes")
+  version                Int           @default(1)
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy              String        @map("created_by") @db.Uuid
+  updatedAt              DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedBy              String        @map("updated_by") @db.Uuid
+
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  category             ExpenseCategory       @relation(fields: [categoryId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  vehicle              Vehicle?              @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  driver               Driver?               @relation(fields: [driverId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  trip                 Trip?                 @relation(fields: [tripId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  maintenanceWorkOrder MaintenanceWorkOrder? @relation(fields: [maintenanceWorkOrderId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdByUser        User                  @relation("ExpenseCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser        User                  @relation("ExpenseUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  voidedByUser         User?                 @relation("ExpenseVoidedBy", fields: [voidedBy], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, displayId])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, categoryId])
+  @@index([organizationId, vehicleId, occurredAt])
+  @@index([organizationId, driverId, occurredAt])
+  @@index([organizationId, tripId])
+  @@index([organizationId, maintenanceWorkOrderId])
+  @@index([organizationId, occurredAt])
+  @@map("expenses")
+}
+
+model FuelImportJob {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  fileName       String           @map("original_file_name") @db.VarChar(255)
+  totalRows      Int              @map("total_rows")
+  importedRows   Int              @map("imported_rows")
+  failedRows     Int              @map("failed_rows")
+  status         FuelImportStatus @default(PENDING)
+  errorSummary   String?          @map("error_summary") @db.VarChar(1000)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdBy      String           @map("created_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdByUser User         @relation("FuelImportJobCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, createdAt])
+  @@map("fuel_import_jobs")
 }

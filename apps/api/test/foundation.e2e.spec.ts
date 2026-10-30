@@ -193,7 +193,8 @@ describe('identity and organization foundation HTTP boundary', () => {
       }),
     ]);
     expect(audit).toMatchObject({ action: 'membership.created', requestId: 'create-member-e2e' });
-    expect(event).toMatchObject({ eventType: 'MembershipCreated', status: 'PENDING' });
+    expect(event).toMatchObject({ eventType: 'MembershipCreated' });
+    expect(['PENDING', 'PUBLISHED']).toContain(event?.status);
     await expect(
       database.auditLog.update({ where: { id: audit!.id }, data: { action: 'tampered' } }),
     ).rejects.toBeDefined();

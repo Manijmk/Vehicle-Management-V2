@@ -6,12 +6,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { TenantHeader } from '../../../components/tenant-header';
 import {
   api,
+  maintenanceApi,
   vehicleApi,
   type CurrentUserResponse,
   type InspectionRecord,
   type InspectionResponseResult,
   type InspectionTemplateRecord,
   type InspectionTemplateItemRecord,
+  type MaintenanceRequestRecord,
 } from '../../../lib/api-client';
 
 interface LocalResponseState {
@@ -27,6 +29,10 @@ export default function InspectionDetailPage() {
   const [inspection, setInspection] = useState<InspectionRecord | null>(null);
   const [template, setTemplate] = useState<InspectionTemplateRecord | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
+  const [maintenanceRequest, setMaintenanceRequest] = useState<MaintenanceRequestRecord | null>(
+    null,
+  );
+  const [mRequestLoading, setMRequestLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,12 +49,14 @@ export default function InspectionDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const [insp, user] = await Promise.all([
+      const [insp, user, mReq] = await Promise.all([
         api.fetchInspection(inspectionId),
         vehicleApi.fetchCurrentUser().catch(() => null),
+        maintenanceApi.fetchInspectionMaintenanceRequest(inspectionId).catch(() => null),
       ]);
       setInspection(insp);
       setCurrentUser(user);
+      setMaintenanceRequest(mReq);
 
       const tmpl = await api.fetchInspectionTemplate(insp.templateId).catch(() => null);
       setTemplate(tmpl);
@@ -88,6 +96,22 @@ export default function InspectionDetailPage() {
   const canPerform = Boolean(currentUser?.permissions.includes('inspection.perform'));
   const canComplete = Boolean(currentUser?.permissions.includes('inspection.complete'));
   const canCancel = Boolean(currentUser?.permissions.includes('inspection.cancel'));
+  const canManageRequest = Boolean(currentUser?.permissions.includes('maintenance.request.create'));
+
+  const handleCreateMaintenanceRequest = async () => {
+    if (!inspection) return;
+    try {
+      setMRequestLoading(true);
+      setError(null);
+      const req = await maintenanceApi.createInspectionMaintenanceRequest(inspection.id);
+      setMaintenanceRequest(req);
+      setSuccessMsg(`Created maintenance request ${req.displayId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create maintenance request');
+    } finally {
+      setMRequestLoading(false);
+    }
+  };
 
   const handleStart = async () => {
     if (!inspection) return;
@@ -482,6 +506,97 @@ export default function InspectionDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Linked Maintenance Request Card */}
+        {maintenanceRequest && (
+          <div
+            data-testid="linked-maintenance-request"
+            style={{
+              background: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: '6px',
+              padding: '1rem',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 600, color: '#1e40af' }}>
+                🔧 Linked Maintenance Request: {maintenanceRequest.displayId}
+              </div>
+              <div style={{ fontSize: '0.875rem', color: '#1e3a8a', marginTop: '0.25rem' }}>
+                Priority: <strong>{maintenanceRequest.priority}</strong> | Status:{' '}
+                <strong>{maintenanceRequest.status}</strong> | Blocks Operation:{' '}
+                <strong>{maintenanceRequest.blocksOperation ? 'YES' : 'NO'}</strong>
+              </div>
+            </div>
+            <Link
+              href={`/maintenance/requests/${maintenanceRequest.id}`}
+              style={{
+                padding: '0.4rem 0.8rem',
+                background: '#2563eb',
+                color: '#fff',
+                borderRadius: '4px',
+                textDecoration: 'none',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+              }}
+              data-testid="view-maintenance-request-link"
+            >
+              View Request &rarr;
+            </Link>
+          </div>
+        )}
+
+        {/* Failed Inspection without Maintenance Request */}
+        {(inspection.hasCriticalFailure || inspection.result === 'FAIL') &&
+          !maintenanceRequest &&
+          inspection.status === 'COMPLETED' && (
+            <div
+              data-testid="unlinked-maintenance-warning"
+              style={{
+                background: '#fef3c7',
+                border: '1px solid #fcd34d',
+                borderRadius: '6px',
+                padding: '1rem',
+                marginBottom: '1.5rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 600, color: '#92400e' }}>
+                  Inspection Failed — No Maintenance Request Linked
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#78350f', marginTop: '0.25rem' }}>
+                  This failed inspection can be escalated into an active Maintenance Request.
+                </div>
+              </div>
+              {canManageRequest && (
+                <button
+                  type="button"
+                  disabled={mRequestLoading}
+                  onClick={() => void handleCreateMaintenanceRequest()}
+                  style={{
+                    padding: '0.4rem 0.8rem',
+                    background: '#d97706',
+                    color: '#fff',
+                    borderRadius: '4px',
+                    border: 'none',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    cursor: mRequestLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  data-testid="btn-create-maintenance-request"
+                >
+                  {mRequestLoading ? 'Creating...' : '+ Create Maintenance Request'}
+                </button>
+              )}
+            </div>
+          )}
 
         {/* Vehicle & Trip Association Info Card */}
         <div

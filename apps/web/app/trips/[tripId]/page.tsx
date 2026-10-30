@@ -7,12 +7,18 @@ import { TenantHeader } from '../../../components/tenant-header';
 import {
   api,
   ApiClientError,
+  complianceApi,
+  financeApi,
+  maintenanceApi,
   tripApi,
   vehicleApi,
   type CurrentUserResponse,
   type InspectionRecord,
+  type SubjectComplianceResponse,
+  type TripFinanceSummaryResponse,
   type TripRecord,
   type TripStatusHistoryEntry,
+  type VehicleMaintenanceSummary,
 } from '../../../lib/api-client';
 
 export default function TripDetailPage() {
@@ -23,6 +29,14 @@ export default function TripDetailPage() {
   const [history, setHistory] = useState<TripStatusHistoryEntry[]>([]);
   const [inspections, setInspections] = useState<InspectionRecord[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
+  const [maintenanceSummary, setMaintenanceSummary] = useState<VehicleMaintenanceSummary | null>(
+    null,
+  );
+  const [vehicleCompliance, setVehicleCompliance] = useState<SubjectComplianceResponse | null>(
+    null,
+  );
+  const [driverCompliance, setDriverCompliance] = useState<SubjectComplianceResponse | null>(null);
+  const [tripFinance, setTripFinance] = useState<TripFinanceSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
@@ -51,16 +65,43 @@ export default function TripDetailPage() {
       setLoading(true);
       setError(null);
       setConflictMessage(null);
-      const [t, hist, inspRes, user] = await Promise.all([
+      const [t, hist, inspRes, user, mSummary, vComp, dComp, finRes] = await Promise.all([
         tripApi.fetchTrip(tripId),
         tripApi.fetchTripStatusHistory(tripId).catch(() => []),
         api.fetchTripInspections(tripId).catch(() => ({ items: [], total: 0 })),
         vehicleApi.fetchCurrentUser().catch(() => null),
+        tripApi
+          .fetchTrip(tripId)
+          .then((tr) =>
+            tr.vehicleId
+              ? maintenanceApi.fetchVehicleMaintenance(tr.vehicleId).catch(() => null)
+              : null,
+          )
+          .catch(() => null),
+        tripApi
+          .fetchTrip(tripId)
+          .then((tr) =>
+            tr.vehicleId
+              ? complianceApi.fetchVehicleCompliance(tr.vehicleId).catch(() => null)
+              : null,
+          )
+          .catch(() => null),
+        tripApi
+          .fetchTrip(tripId)
+          .then((tr) =>
+            tr.driverId ? complianceApi.fetchDriverCompliance(tr.driverId).catch(() => null) : null,
+          )
+          .catch(() => null),
+        financeApi.fetchTripFinance(tripId).catch(() => null),
       ]);
       setTrip(t);
       setHistory(hist);
       setInspections(inspRes.items);
       setCurrentUser(user);
+      setMaintenanceSummary(mSummary);
+      setVehicleCompliance(vComp);
+      setDriverCompliance(dComp);
+      setTripFinance(finRes);
 
       const defaultOdo = t.vehicle?.odometerKm ?? t.startOdometerKm ?? 0;
       setStartOdo(defaultOdo);
@@ -202,6 +243,8 @@ export default function TripDetailPage() {
         setActionError('Driver is no longer active.');
       } else if (err.code === 'TRIP_DRIVER_NOT_ELIGIBLE') {
         setActionError('Driver is no longer operationally eligible (valid license required).');
+      } else if (err.code === 'VEHICLE_BLOCKED_BY_MAINTENANCE') {
+        setActionError('Vehicle is blocked by active maintenance and cannot be dispatched.');
       } else {
         setActionError(err.message || defaultMsg);
       }
@@ -362,6 +405,83 @@ export default function TripDetailPage() {
         </div>
       ) : null}
 
+      {/* Milestone 7: Maintenance Warning Banner */}
+      {maintenanceSummary?.isOperationallyBlocked && (
+        <div
+          data-testid="trip-maintenance-warning-banner"
+          style={{
+            padding: '1rem',
+            borderRadius: '8px',
+            marginBottom: '1.5rem',
+            border: '1px solid #ef4444',
+            backgroundColor: '#fef2f2',
+            color: '#991b1b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+          }}
+        >
+          <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+          <div>
+            <div style={{ fontWeight: 600 }}>Vehicle Blocked by Maintenance</div>
+            <div style={{ fontSize: '0.875rem' }}>
+              Vehicle {trip.vehicle?.displayId || trip.vehicleId} currently has active blocking
+              maintenance ({maintenanceSummary.openRequests.length} request(s),{' '}
+              {maintenanceSummary.activeWorkOrders.length} work order(s)). Readying or starting this
+              trip is blocked until maintenance is resolved.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Milestone 8: Compliance Warning Banner */}
+      {(vehicleCompliance?.evaluation.operationallyBlocked ||
+        driverCompliance?.evaluation.operationallyBlocked) && (
+        <div
+          data-testid="trip-compliance-warning-banner"
+          style={{
+            padding: '1rem',
+            borderRadius: '8px',
+            marginBottom: '1.5rem',
+            border: '1px solid #ef4444',
+            backgroundColor: '#fef2f2',
+            color: '#991b1b',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.75rem',
+          }}
+        >
+          <span style={{ fontSize: '1.25rem', marginTop: '0.1rem' }}>🛡️</span>
+          <div>
+            <div style={{ fontWeight: 600 }}>Trip Blocked by Compliance Gating</div>
+            <div style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>
+              Marking this trip READY or starting this trip is blocked because required operational
+              compliance documents are missing or expired:
+            </div>
+            {vehicleCompliance?.evaluation.operationallyBlocked && (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
+                <strong>Vehicle ({trip.vehicle?.displayId || trip.vehicleId}):</strong>
+                <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.25rem' }}>
+                  {vehicleCompliance.evaluation.blockingReasons.map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {driverCompliance?.evaluation.operationallyBlocked && (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
+                <strong>Driver ({trip.driver?.displayId || trip.driverId}):</strong>
+                <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.25rem' }}>
+                  {driverCompliance.evaluation.blockingReasons.map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Milestone 6: Pre-Trip Inspection Gate Card */}
       {trip.status === 'READY' && (
         <div
@@ -427,119 +547,6 @@ export default function TripDetailPage() {
                 {latestPreTrip?.result === 'FAIL'
                   ? 'Start Re-inspection'
                   : 'Start Pre-Trip Inspection'}
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Milestone 6: Post-Trip Inspection Gate Card */}
-      {trip.status === 'IN_PROGRESS' && (
-        <div
-          data-testid="post-trip-gate-card"
-          style={{
-            padding: '1rem',
-            borderRadius: '6px',
-            marginBottom: '1.5rem',
-            border: hasPostTrip ? '1px solid #86efac' : '1px solid #93c5fd',
-            background: hasPostTrip ? '#f0fdf4' : '#eff6ff',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div
-                style={{
-                  fontWeight: 600,
-                  fontSize: '0.9375rem',
-                  color: hasPostTrip ? '#166534' : '#1e40af',
-                }}
-              >
-                {hasPostTrip ? 'Post-Trip Inspection Completed' : 'Post-Trip Inspection Required'}
-              </div>
-              <div style={{ fontSize: '0.8125rem', marginTop: '0.25rem', color: '#475569' }}>
-                {hasPostTrip
-                  ? 'Post-trip inspection recorded. Trip can now be completed.'
-                  : 'A post-trip inspection must be submitted before this trip can be completed.'}
-              </div>
-            </div>
-
-            {!hasPostTrip && (
-              <Link
-                href={`/inspections/new?tripId=${trip.id}&vehicleId=${trip.vehicleId}&type=POST_TRIP`}
-                className="primary-action"
-                data-testid="start-post-trip-inspection-btn"
-                style={{ textDecoration: 'none', padding: '0.4rem 0.8rem', fontSize: '0.875rem' }}
-              >
-                Start Post-Trip Inspection
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Milestone 6: Pre-Trip Inspection Gate Card */}
-      {trip.status === 'READY' && (
-        <div
-          data-testid="pre-trip-gate-card"
-          style={{
-            padding: '1rem',
-            borderRadius: '6px',
-            marginBottom: '1.5rem',
-            border:
-              latestPreTrip?.result === 'PASS'
-                ? '1px solid #86efac'
-                : latestPreTrip?.result === 'FAIL'
-                  ? '1px solid #f87171'
-                  : '1px solid #fde047',
-            background:
-              latestPreTrip?.result === 'PASS'
-                ? '#f0fdf4'
-                : latestPreTrip?.result === 'FAIL'
-                  ? '#fef2f2'
-                  : '#fefce8',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div
-                style={{
-                  fontWeight: 600,
-                  fontSize: '0.9375rem',
-                  color:
-                    latestPreTrip?.result === 'PASS'
-                      ? '#166534'
-                      : latestPreTrip?.result === 'FAIL'
-                        ? '#991b1b'
-                        : '#854d0e',
-                }}
-              >
-                {latestPreTrip?.result === 'PASS'
-                  ? 'Pre-Trip Inspection: PASS'
-                  : latestPreTrip?.result === 'FAIL'
-                    ? 'Pre-Trip Inspection: FAILED'
-                    : 'Pre-Trip Inspection Required'}
-              </div>
-              <div style={{ fontSize: '0.8125rem', marginTop: '0.25rem', color: '#475569' }}>
-                {latestPreTrip?.result === 'PASS'
-                  ? `Safety verified (${latestPreTrip.displayId}). Trip is authorized to start.`
-                  : latestPreTrip?.result === 'FAIL'
-                    ? `Defect detected on ${latestPreTrip.displayId}. A passing re-inspection is required before this trip can start.`
-                    : 'A completed and passing pre-trip inspection is required before departure.'}
-              </div>
-            </div>
-
-            {(!latestPreTrip || latestPreTrip.result === 'FAIL') && (
-              <Link
-                href={`/inspections/new?tripId=${trip.id}&vehicleId=${trip.vehicleId}&type=PRE_TRIP`}
-                className="primary-action"
-                data-testid={
-                  latestPreTrip?.result === 'FAIL'
-                    ? 'start-reinspection-btn'
-                    : 'start-pre-trip-inspection-btn'
-                }
-                style={{ textDecoration: 'none', padding: '0.4rem 0.8rem', fontSize: '0.875rem' }}
-              >
-                {latestPreTrip?.result === 'FAIL' ? 'Start Re-inspection' : 'Start Pre-Trip Inspection'}
               </Link>
             )}
           </div>
@@ -851,14 +858,40 @@ export default function TripDetailPage() {
               <dt>Vehicle</dt>
               <dd>
                 {trip.vehicle ? (
-                  <Link
-                    href={`/vehicles/${trip.vehicle.id}`}
-                    className="table-link"
-                    data-testid="trip-vehicle-link"
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      flexWrap: 'wrap',
+                    }}
                   >
-                    {trip.vehicle.displayId} ({trip.vehicle.registration}) &bull;{' '}
-                    {trip.vehicle.model}
-                  </Link>
+                    <Link
+                      href={`/vehicles/${trip.vehicle.id}`}
+                      className="table-link"
+                      data-testid="trip-vehicle-link"
+                    >
+                      {trip.vehicle.displayId} ({trip.vehicle.registration}) &bull;{' '}
+                      {trip.vehicle.model}
+                    </Link>
+                    {vehicleCompliance && (
+                      <span
+                        className={`status-pill ${
+                          vehicleCompliance.evaluation.overallState === 'COMPLIANT'
+                            ? 'active'
+                            : vehicleCompliance.evaluation.overallState === 'WARNING'
+                              ? 'warning'
+                              : 'blocked'
+                        }`}
+                        data-testid="trip-vehicle-compliance-pill"
+                        style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem' }}
+                      >
+                        {vehicleCompliance.evaluation.operationallyBlocked
+                          ? 'Compliance Blocked'
+                          : `Compliance: ${vehicleCompliance.evaluation.overallState}`}
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   trip.vehicleId
                 )}
@@ -868,13 +901,39 @@ export default function TripDetailPage() {
               <dt>Driver</dt>
               <dd>
                 {trip.driver ? (
-                  <Link
-                    href={`/drivers/${trip.driver.id}`}
-                    className="table-link"
-                    data-testid="trip-driver-link"
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      flexWrap: 'wrap',
+                    }}
                   >
-                    {trip.driver.displayId} ({trip.driver.firstName} {trip.driver.lastName})
-                  </Link>
+                    <Link
+                      href={`/drivers/${trip.driver.id}`}
+                      className="table-link"
+                      data-testid="trip-driver-link"
+                    >
+                      {trip.driver.displayId} ({trip.driver.firstName} {trip.driver.lastName})
+                    </Link>
+                    {driverCompliance && (
+                      <span
+                        className={`status-pill ${
+                          driverCompliance.evaluation.overallState === 'COMPLIANT'
+                            ? 'active'
+                            : driverCompliance.evaluation.overallState === 'WARNING'
+                              ? 'warning'
+                              : 'blocked'
+                        }`}
+                        data-testid="trip-driver-compliance-pill"
+                        style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem' }}
+                      >
+                        {driverCompliance.evaluation.operationallyBlocked
+                          ? 'Compliance Blocked'
+                          : `Compliance: ${driverCompliance.evaluation.overallState}`}
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   trip.driverId
                 )}
@@ -1059,63 +1118,264 @@ export default function TripDetailPage() {
         )}
       </section>
 
-      {/* Trip Inspections Section */}
+      {/* Trip Finance & Costs Section */}
       <section
-        className="panel"
-        aria-label="Trip Inspections"
-        style={{ marginTop: '2rem' }}
+        style={{
+          marginTop: '2rem',
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          padding: '1.5rem',
+          background: '#fff',
+        }}
+        data-testid="section-trip-finance"
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h2>Trip Inspections ({inspections.length})</h2>
-          <Link
-            href={`/inspections/new?tripId=${trip.id}&vehicleId=${trip.vehicleId}`}
-            className="secondary-action"
-            data-testid="add-trip-inspection-link"
-            style={{ textDecoration: 'none', fontSize: '0.875rem' }}
-          >
-            + Add Inspection
-          </Link>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1rem',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, margin: 0 }}>
+              Trip Finance & Operational Costs
+            </h2>
+            <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0.25rem 0 0 0' }}>
+              Fuel purchases and fleet expenses incurred during this specific trip.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <Link
+              href="/fuel/new"
+              style={{
+                padding: '0.4rem 0.8rem',
+                background: '#2563eb',
+                color: '#fff',
+                borderRadius: '6px',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                textDecoration: 'none',
+              }}
+              data-testid="btn-trip-log-fuel"
+            >
+              + Log Fuel for Trip
+            </Link>
+            <Link
+              href="/expenses/new"
+              style={{
+                padding: '0.4rem 0.8rem',
+                background: '#059669',
+                color: '#fff',
+                borderRadius: '6px',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                textDecoration: 'none',
+              }}
+              data-testid="btn-trip-record-expense"
+            >
+              + Add Trip Expense
+            </Link>
+          </div>
         </div>
 
-        {inspections.length === 0 ? (
-          <p className="loading-state">No inspections recorded for this trip.</p>
-        ) : (
-          <table className="data-table" data-testid="trip-inspections-table">
-            <thead>
-              <tr>
-                <th scope="col">ID</th>
-                <th scope="col">Type</th>
-                <th scope="col">Template</th>
-                <th scope="col">Status</th>
-                <th scope="col">Result</th>
-                <th scope="col">Created At</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inspections.map((i) => (
-                <tr key={i.id} data-testid={`trip-inspection-row-${i.id}`}>
-                  <td>
-                    <Link href={`/inspections/${i.id}`} className="table-link" data-testid={`trip-inspection-link-${i.id}`}>
-                      {i.displayId}
-                    </Link>
-                  </td>
-                  <td>{i.type}</td>
-                  <td>{i.template?.name ?? '—'}</td>
-                  <td>{i.status}</td>
-                  <td>
-                    {i.result ? (
-                      <span style={{ fontWeight: 600, color: i.result === 'PASS' ? '#166534' : '#991b1b' }}>
-                        {i.result}
+        {tripFinance && (
+          <>
+            {/* Cost Totals Cards */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '1rem',
+                marginBottom: '1.5rem',
+              }}
+              data-testid="trip-cost-totals"
+            >
+              {!tripFinance.spendByCurrency || tripFinance.spendByCurrency.length === 0 ? (
+                <div style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '0.875rem' }}>
+                  No costs recorded for this trip.
+                </div>
+              ) : (
+                tripFinance.spendByCurrency.map((spend) => (
+                  <div
+                    key={spend.currencyCode}
+                    style={{
+                      background: '#f9fafb',
+                      padding: '1rem',
+                      borderRadius: '6px',
+                      border: '1px solid #e5e7eb',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                        {spend.currencyCode}
                       </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td>{new Date(i.createdAt).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      <strong style={{ fontSize: '1.125rem', color: '#111827' }}>
+                        {spend.totalSpend.toFixed(2)} {spend.currencyCode}
+                      </strong>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#4b5563', marginTop: '0.25rem' }}>
+                      Fuel: {spend.fuelSpend.toFixed(2)} | Expenses: {spend.expenseSpend.toFixed(2)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Trip Fuel Transactions */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                Trip Fuel Transactions ({tripFinance.fuelTransactions.length})
+              </h3>
+              {tripFinance.fuelTransactions.length === 0 ? (
+                <p style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '0.875rem' }}>
+                  No fuel transactions recorded for this trip.
+                </p>
+              ) : (
+                <div
+                  style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                >
+                  <table
+                    style={{
+                      width: '100%',
+                      borderCollapse: 'collapse',
+                      fontSize: '0.8125rem',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <thead style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                      <tr>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Display ID</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Date</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Quantity</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Total</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Odometer</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tripFinance.fuelTransactions.map((ft) => (
+                        <tr key={ft.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600 }}>
+                            <Link
+                              href={`/fuel/${ft.id}`}
+                              style={{ color: '#2563eb', textDecoration: 'none' }}
+                            >
+                              {ft.displayId}
+                            </Link>
+                          </td>
+                          <td style={{ padding: '0.5rem 0.75rem' }}>
+                            {new Date(ft.occurredAt).toLocaleDateString()}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.75rem' }}>
+                            {ft.quantity} {ft.quantityUnit}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600 }}>
+                            {ft.totalAmount.toFixed(2)} {ft.currencyCode}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.75rem' }}>
+                            {ft.odometerKm !== null ? `${ft.odometerKm} km` : '-'}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.75rem' }}>
+                            <span
+                              style={{
+                                padding: '0.15rem 0.4rem',
+                                borderRadius: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                background: ft.status === 'POSTED' ? '#dcfce7' : '#f3f4f6',
+                                color: ft.status === 'POSTED' ? '#166534' : '#6b7280',
+                              }}
+                            >
+                              {ft.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Trip Expenses */}
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                Trip Expenses ({tripFinance.expenses.length})
+              </h3>
+              {tripFinance.expenses.length === 0 ? (
+                <p style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '0.875rem' }}>
+                  No expenses recorded for this trip.
+                </p>
+              ) : (
+                <div
+                  style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                >
+                  <table
+                    style={{
+                      width: '100%',
+                      borderCollapse: 'collapse',
+                      fontSize: '0.8125rem',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <thead style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                      <tr>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Display ID</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Category</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Description</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Amount</th>
+                        <th style={{ padding: '0.5rem 0.75rem' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tripFinance.expenses.map((ex) => (
+                        <tr key={ex.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600 }}>
+                            <Link
+                              href={`/expenses/${ex.id}`}
+                              style={{ color: '#2563eb', textDecoration: 'none' }}
+                            >
+                              {ex.displayId}
+                            </Link>
+                          </td>
+                          <td style={{ padding: '0.5rem 0.75rem' }}>
+                            {ex.category?.name || 'Expense'}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.75rem' }}>{ex.description}</td>
+                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600 }}>
+                            {ex.amount.toFixed(2)} {ex.currencyCode}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.75rem' }}>
+                            <span
+                              style={{
+                                padding: '0.15rem 0.4rem',
+                                borderRadius: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                background: ex.status === 'POSTED' ? '#dcfce7' : '#fef3c7',
+                                color: ex.status === 'POSTED' ? '#166534' : '#92400e',
+                              }}
+                            >
+                              {ex.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </section>
     </main>

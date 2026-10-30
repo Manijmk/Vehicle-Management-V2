@@ -122,6 +122,41 @@ export function TenantHeader({ onAuthChange }: { onAuthChange?: () => void }) {
         >
           Templates
         </Link>
+        <Link
+          href="/maintenance"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-maintenance"
+        >
+          Maintenance
+        </Link>
+        <Link
+          href="/compliance"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-compliance"
+        >
+          Compliance
+        </Link>
+        <Link
+          href="/finance"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-finance"
+        >
+          Finance
+        </Link>
+        <Link
+          href="/fuel"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-fuel"
+        >
+          Fuel
+        </Link>
+        <Link
+          href="/expenses"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-expenses"
+        >
+          Expenses
+        </Link>
       </nav>
 
       <div className="auth-actions">

@@ -8,8 +8,11 @@ import { AuthenticationGuard } from './modules/identity/transport/authentication
 import { PermissionGuard } from './modules/identity/transport/permission.guard.js';
 import { TenantContextGuard } from './modules/identity/transport/tenant-context.guard.js';
 import { AssignmentModule } from './modules/assignment/assignment.module.js';
+import { ComplianceModule } from './modules/compliance/compliance.module.js';
 import { DriverModule } from './modules/driver/driver.module.js';
+import { FinanceModule } from './modules/finance/finance.module.js';
 import { InspectionModule } from './modules/inspection/inspection.module.js';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module.js';
 import { TripModule } from './modules/trip/trip.module.js';
 import { VehicleModule } from './modules/vehicle/vehicle.module.js';
 
@@ -22,6 +25,9 @@ import { VehicleModule } from './modules/vehicle/vehicle.module.js';
     AssignmentModule,
     TripModule,
     InspectionModule,
+    MaintenanceModule,
+    ComplianceModule,
+    FinanceModule,
   ],
   controllers: [HealthController],
   providers: [

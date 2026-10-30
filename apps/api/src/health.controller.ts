@@ -5,16 +5,20 @@ import type { HealthResponse } from '@vms/contracts';
 import { Public } from './modules/identity/transport/security.decorators.js';
 
 class HealthResponseDto implements HealthResponse {
-  @ApiProperty({ example: 'ok' })
+  @ApiProperty({ type: String, enum: ['ok'], example: 'ok' })
   readonly status = 'ok' as const;
 
-  @ApiProperty({ example: 'vehicle-management-api' })
+  @ApiProperty({
+    type: String,
+    enum: ['vehicle-management-api'],
+    example: 'vehicle-management-api',
+  })
   readonly service = 'vehicle-management-api' as const;
 
-  @ApiProperty({ example: '0.1.0' })
+  @ApiProperty({ type: String, example: '0.1.0' })
   readonly version = '0.1.0';
 
-  @ApiProperty({ example: '2026-08-18T00:00:00.000Z', format: 'date-time' })
+  @ApiProperty({ type: String, example: '2026-08-18T00:00:00.000Z', format: 'date-time' })
   readonly timestamp = new Date().toISOString();
 }
 

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OutboxProcessorService } from './outbox-processor.service.js';
 import { PrismaOutboxStore } from './prisma-outbox.store.js';
+import { LoggingEventPublisher } from './logging-event.publisher.js';
 import type { IntegrationEventPublisher } from './outbox.types.js';
 
 const organizationId = '12000000-0000-4000-8000-000000000001';
@@ -315,5 +316,154 @@ describe('persisted outbox publication', () => {
       const row = await database.outboxEvent.findUnique({ where: { id: evt.id } });
       expect(row?.status).toBe('PUBLISHED');
     }
+  });
+
+  it('claims and publishes maintenance lifecycle events', async () => {
+    const maintenanceEvents = [
+      { id: '72000000-0000-4000-8000-000000000060', eventType: 'MaintenanceRequestCreated' },
+      { id: '72000000-0000-4000-8000-000000000061', eventType: 'MaintenanceRequestConverted' },
+      { id: '72000000-0000-4000-8000-000000000062', eventType: 'MaintenanceRequestCancelled' },
+      { id: '72000000-0000-4000-8000-000000000063', eventType: 'WorkOrderCreated' },
+      { id: '72000000-0000-4000-8000-000000000064', eventType: 'WorkOrderStarted' },
+      { id: '72000000-0000-4000-8000-000000000065', eventType: 'WorkOrderCompleted' },
+      { id: '72000000-0000-4000-8000-000000000066', eventType: 'WorkOrderCancelled' },
+    ];
+    for (const evt of maintenanceEvents) {
+      await database.outboxEvent.create({
+        data: {
+          id: evt.id,
+          organizationId,
+          eventType: evt.eventType,
+          aggregateType: 'Maintenance',
+          aggregateId: '93000000-0000-4000-8000-000000000001',
+          payload: { eventId: evt.id, eventType: evt.eventType },
+          occurredAt: new Date(),
+        },
+      });
+    }
+
+    const store = new PrismaOutboxStore(database);
+    const publisher = {
+      publish: vi.fn().mockResolvedValue(undefined),
+    } as IntegrationEventPublisher;
+    const processor = new OutboxProcessorService(store, publisher, config);
+
+    const processed = await processor.processBatch();
+    expect(processed).toBe(7);
+    for (const evt of maintenanceEvents) {
+      expect(publisher.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ id: evt.id, eventType: evt.eventType, attempts: 1 }),
+      );
+      const row = await database.outboxEvent.findUnique({ where: { id: evt.id } });
+      expect(row?.status).toBe('PUBLISHED');
+    }
+  });
+
+  it('LoggingEventPublisher automatically and idempotently creates a blocking maintenance request on InspectionCriticalFailureDetected', async () => {
+    // 1. Setup user, vehicle, inspection template, inspection
+    const userId = '02000000-0000-4000-8000-000000000001';
+    await database.user.upsert({
+      where: { id: userId },
+      update: {},
+      create: {
+        id: userId,
+        email: 'worker-test@vms.local',
+        displayName: 'Worker Test User',
+      },
+    });
+
+    const vehicleId = '32000000-0000-4000-8000-000000000001';
+    await database.vehicle.upsert({
+      where: { id: vehicleId },
+      update: {},
+      create: {
+        id: vehicleId,
+        organizationId,
+        displayId: 'VEH-999',
+        type: 'CAR',
+        fuelType: 'PETROL',
+        vin: '1HGCR2F83HA000999',
+        registration: 'REG-999',
+        model: 'Accord',
+        year: 2021,
+        status: 'ACTIVE',
+        odometerKm: 45000,
+      },
+    });
+
+    const templateId = '62000000-0000-4000-8000-000000000001';
+    await database.inspectionTemplate.upsert({
+      where: { id: templateId },
+      update: {},
+      create: {
+        id: templateId,
+        organizationId,
+        name: 'Safety Inspection',
+        type: 'PRE_TRIP',
+        status: 'ACTIVE',
+        version: 1,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+    });
+
+    const inspectionId = '82000000-0000-4000-8000-000000000001';
+    await database.inspection.upsert({
+      where: { id: inspectionId },
+      update: {},
+      create: {
+        id: inspectionId,
+        organizationId,
+        displayId: 'INSP-999',
+        templateId,
+        vehicleId,
+        type: 'PRE_TRIP',
+        status: 'COMPLETED',
+        result: 'FAIL',
+        hasCriticalFailure: true,
+        version: 1,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+    });
+
+    const loggingPublisher = new LoggingEventPublisher(database);
+    const event = {
+      id: '72000000-0000-4000-8000-000000000070',
+      organizationId,
+      eventType: 'InspectionCriticalFailureDetected',
+      aggregateType: 'Inspection',
+      aggregateId: inspectionId,
+      payload: { inspectionId, vehicleId },
+      attempts: 1,
+      lastError: null,
+      occurredAt: new Date(),
+    };
+
+    // First delivery
+    await loggingPublisher.publish(event);
+
+    const createdMr = await database.maintenanceRequest.findFirst({
+      where: { organizationId, sourceInspectionId: inspectionId },
+    });
+    expect(createdMr).not.toBeNull();
+    expect(createdMr?.priority).toBe('CRITICAL');
+    expect(createdMr?.blocksOperation).toBe(true);
+    expect(createdMr?.status).toBe('OPEN');
+    expect(createdMr?.vehicleId).toBe(vehicleId);
+
+    // Second delivery (idempotency verification)
+    await expect(loggingPublisher.publish(event)).resolves.not.toThrow();
+
+    const count = await database.maintenanceRequest.count({
+      where: { organizationId, sourceInspectionId: inspectionId },
+    });
+    expect(count).toBe(1);
+
+    // Cleanup
+    await database.maintenanceRequest.deleteMany({ where: { organizationId } });
+    await database.inspection.deleteMany({ where: { id: inspectionId } });
+    await database.inspectionTemplate.deleteMany({ where: { id: templateId } });
+    await database.vehicle.deleteMany({ where: { id: vehicleId } });
   });
 });

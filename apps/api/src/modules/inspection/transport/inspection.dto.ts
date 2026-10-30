@@ -157,4 +157,3 @@ export class ListInspectionsQueryDto {
   @Min(0)
   offset?: number;
 }
-

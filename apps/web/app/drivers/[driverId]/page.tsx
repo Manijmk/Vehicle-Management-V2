@@ -8,13 +8,16 @@ import {
   api,
   ApiClientError,
   assignmentApi,
+  complianceApi,
   driverApi,
   tripApi,
   vehicleApi,
+  type ComplianceDocumentTypeRecord,
   type CurrentUserResponse,
   type DriverRecord,
   type DriverStatusHistoryEntry,
   type InspectionRecord,
+  type SubjectComplianceResponse,
   type TripRecord,
   type VehicleDriverAssignmentRecord,
 } from '../../../lib/api-client';
@@ -72,6 +75,20 @@ export default function DriverDetailPage() {
     notes: '',
   });
 
+  // Compliance state
+  const [complianceData, setComplianceData] = useState<SubjectComplianceResponse | null>(null);
+  const [driverDocTypes, setDriverDocTypes] = useState<ComplianceDocumentTypeRecord[]>([]);
+  const [showUploadDocModal, setShowUploadDocModal] = useState(false);
+  const [uploadDocTypeId, setUploadDocTypeId] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadDocNumber, setUploadDocNumber] = useState('');
+  const [uploadIssuer, setUploadIssuer] = useState('');
+  const [uploadIssuedOn, setUploadIssuedOn] = useState('');
+  const [uploadExpiresOn, setUploadExpiresOn] = useState('');
+  const [uploadNotes, setUploadNotes] = useState('');
+  const [uploadSubmitting, setUploadSubmitting] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const loadData = useCallback(async () => {
     if (!driverId) return;
     try {
@@ -80,22 +97,27 @@ export default function DriverDetailPage() {
       setConflictMessage(null);
       setActionErrorMessage(null);
 
-      const [d, h, u, curAsn, asnH, curTrip, tripH, inspRes] = await Promise.all([
-        driverApi.fetchDriver(driverId),
-        driverApi.fetchStatusHistory(driverId).catch(() => []),
-        vehicleApi.fetchCurrentUser().catch(() => null),
-        assignmentApi.fetchDriverCurrentAssignment(driverId).catch(() => null),
-        assignmentApi.fetchDriverAssignmentHistory(driverId).catch(() => []),
-        tripApi.fetchDriverCurrentTrip(driverId).catch(() => null),
-        tripApi
-          .fetchDriverTripHistory(driverId, 20)
-          .then((res) => res.items)
-          .catch(() => []),
-        api
-          .fetchDriverInspections(driverId, 20)
-          .then((res) => res.items)
-          .catch(() => []),
-      ]);
+      const [d, h, u, curAsn, asnH, curTrip, tripH, inspRes, compRes, docTypesRes] =
+        await Promise.all([
+          driverApi.fetchDriver(driverId),
+          driverApi.fetchStatusHistory(driverId).catch(() => []),
+          vehicleApi.fetchCurrentUser().catch(() => null),
+          assignmentApi.fetchDriverCurrentAssignment(driverId).catch(() => null),
+          assignmentApi.fetchDriverAssignmentHistory(driverId).catch(() => []),
+          tripApi.fetchDriverCurrentTrip(driverId).catch(() => null),
+          tripApi
+            .fetchDriverTripHistory(driverId, 20)
+            .then((res) => res.items)
+            .catch(() => []),
+          api
+            .fetchDriverInspections(driverId, 20)
+            .then((res) => res.items)
+            .catch(() => []),
+          complianceApi.fetchDriverCompliance(driverId).catch(() => null),
+          complianceApi
+            .fetchDocumentTypes({ subjectType: 'DRIVER', status: 'ACTIVE' })
+            .catch(() => ({ items: [], total: 0 })),
+        ]);
       setDriver(d);
       setHistory(h);
       setCurrentUser(u);
@@ -104,6 +126,8 @@ export default function DriverDetailPage() {
       setCurrentTrip(curTrip);
       setTripHistory(tripH);
       setInspections(inspRes);
+      setComplianceData(compRes);
+      setDriverDocTypes(docTypesRes.items);
       setEditData({
         firstName: d.firstName,
         lastName: d.lastName,
@@ -326,6 +350,41 @@ export default function DriverDetailPage() {
       setActionErrorMessage(err instanceof Error ? err.message : 'Failed to remove license');
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleUploadComplianceDoc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadDocTypeId || !uploadFile) {
+      setUploadError('Document type and file are required.');
+      return;
+    }
+    try {
+      setUploadSubmitting(true);
+      setUploadError(null);
+      const formData = new FormData();
+      formData.append('documentTypeId', uploadDocTypeId);
+      formData.append('file', uploadFile);
+      if (uploadDocNumber) formData.append('documentNumber', uploadDocNumber);
+      if (uploadIssuer) formData.append('issuingAuthority', uploadIssuer);
+      if (uploadIssuedOn) formData.append('issuedOn', uploadIssuedOn);
+      if (uploadExpiresOn) formData.append('expiresOn', uploadExpiresOn);
+      if (uploadNotes) formData.append('notes', uploadNotes);
+
+      await complianceApi.uploadDriverDocument(driverId, formData);
+      setShowUploadDocModal(false);
+      setUploadDocTypeId('');
+      setUploadFile(null);
+      setUploadDocNumber('');
+      setUploadIssuer('');
+      setUploadIssuedOn('');
+      setUploadExpiresOn('');
+      setUploadNotes('');
+      await loadData();
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : 'Failed to upload compliance document');
+    } finally {
+      setUploadSubmitting(false);
     }
   };
 
@@ -944,6 +1003,550 @@ export default function DriverDetailPage() {
           </div>
         )}
       </section>
+
+      {/* Driver Regulatory Compliance Section (distinct from Driver License) */}
+      <section
+        className="panel"
+        style={{ marginTop: '1.5rem', padding: '1.25rem' }}
+        data-testid="driver-compliance-section"
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <h2 style={{ margin: 0 }}>Regulatory Compliance & Documents</h2>
+              {complianceData ? (
+                <span
+                  style={{
+                    padding: '0.25rem 0.6rem',
+                    borderRadius: '9999px',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    background:
+                      complianceData.evaluation.overallState === 'COMPLIANT'
+                        ? '#dcfce7'
+                        : complianceData.evaluation.overallState === 'WARNING'
+                          ? '#fef9c3'
+                          : '#fee2e2',
+                    color:
+                      complianceData.evaluation.overallState === 'COMPLIANT'
+                        ? '#166534'
+                        : complianceData.evaluation.overallState === 'WARNING'
+                          ? '#854d0e'
+                          : '#991b1b',
+                  }}
+                  data-testid="driver-compliance-status"
+                >
+                  {complianceData.evaluation.overallState}
+                </span>
+              ) : null}
+              {complianceData?.evaluation.operationallyBlocked ? (
+                <span
+                  style={{
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: '9999px',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    background: '#fee2e2',
+                    color: '#991b1b',
+                  }}
+                  data-testid="driver-blocked-badge"
+                >
+                  DISPATCH BLOCKED
+                </span>
+              ) : (
+                <span
+                  style={{
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: '9999px',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    background: '#dcfce7',
+                    color: '#166534',
+                  }}
+                  data-testid="driver-unblocked-badge"
+                >
+                  CLEAR FOR DISPATCH
+                </span>
+              )}
+            </div>
+            <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: '0.25rem 0 0 0' }}>
+              Medical fitness, background checks, and certifications. Canonical driver licenses are
+              managed in the Driver License section above.
+            </p>
+          </div>
+
+          {permissions.includes('compliance.document.upload') && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowUploadDocModal(true);
+                setUploadError(null);
+                if (driverDocTypes[0] && !uploadDocTypeId) {
+                  setUploadDocTypeId(driverDocTypes[0].id);
+                }
+              }}
+              className="secondary-action"
+              style={{ fontSize: '0.875rem', cursor: 'pointer' }}
+              data-testid="btn-upload-driver-doc"
+            >
+              + Upload Compliance Document
+            </button>
+          )}
+        </div>
+
+        {/* Operational Blocking Alert */}
+        {complianceData?.evaluation.operationallyBlocked && (
+          <div
+            style={{
+              marginTop: '1rem',
+              padding: '1rem',
+              background: '#fee2e2',
+              border: '1px solid #ef4444',
+              borderRadius: '6px',
+              color: '#991b1b',
+            }}
+            data-testid="driver-compliance-blocked-banner"
+          >
+            <strong>Operational Dispatch Blocked:</strong> Driver cannot be assigned or dispatched
+            on trips due to compliance:
+            <ul style={{ margin: '0.5rem 0 0 0', paddingLeft: '1.25rem' }}>
+              {complianceData.evaluation.blockingReasons.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Requirements Checklist */}
+        <div style={{ marginTop: '1.25rem' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 0.5rem 0' }}>
+            Compliance Requirements Checklist
+          </h3>
+
+          {!complianceData || complianceData.evaluation.requirements.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>
+              No document requirements configured for drivers.
+            </p>
+          ) : (
+            <table
+              className="data-table"
+              style={{ width: '100%', marginTop: '0.5rem' }}
+              data-testid="driver-compliance-requirements-table"
+            >
+              <thead>
+                <tr>
+                  <th scope="col">Requirement</th>
+                  <th scope="col">Code</th>
+                  <th scope="col">Policy</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Active Document</th>
+                  <th scope="col">Expires On</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {complianceData.evaluation.requirements.map((req) => (
+                  <tr
+                    key={req.documentTypeId}
+                    data-testid={`requirement-row-${req.documentTypeCode}`}
+                  >
+                    <td>
+                      <strong>{req.documentTypeName}</strong>
+                    </td>
+                    <td>
+                      <code>{req.documentTypeCode}</code>
+                    </td>
+                    <td>
+                      {req.required ? (
+                        <span
+                          style={{
+                            color: req.blocksOperation ? '#dc2626' : '#4b5563',
+                            fontWeight: req.blocksOperation ? 600 : 400,
+                          }}
+                        >
+                          {req.blocksOperation ? 'Mandatory (Blocks Dispatch)' : 'Required'}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#6b7280' }}>Optional</span>
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '9999px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          background:
+                            req.derivedState === 'VALID'
+                              ? '#dcfce7'
+                              : req.derivedState === 'EXPIRING_SOON'
+                                ? '#fef9c3'
+                                : '#fee2e2',
+                          color:
+                            req.derivedState === 'VALID'
+                              ? '#166534'
+                              : req.derivedState === 'EXPIRING_SOON'
+                                ? '#854d0e'
+                                : '#991b1b',
+                        }}
+                        data-testid={`req-status-${req.documentTypeCode}`}
+                      >
+                        {req.derivedState}
+                      </span>
+                    </td>
+                    <td>
+                      {req.activeDocument ? (
+                        <Link
+                          href={`/compliance/documents/${req.activeDocument.id}`}
+                          className="table-link"
+                          data-testid={`active-doc-link-${req.documentTypeCode}`}
+                        >
+                          {req.activeDocument.documentNumber || req.activeDocument.displayId}
+                        </Link>
+                      ) : (
+                        <span style={{ color: '#9ca3af' }}>None uploaded</span>
+                      )}
+                    </td>
+                    <td>
+                      {req.activeDocument?.expiresOn ? (
+                        new Date(req.activeDocument.expiresOn).toLocaleDateString()
+                      ) : (
+                        <span style={{ color: '#9ca3af' }}>&mdash;</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {permissions.includes('compliance.document.upload') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUploadDocTypeId(req.documentTypeId);
+                            setUploadError(null);
+                            setShowUploadDocModal(true);
+                          }}
+                          style={{
+                            padding: '0.25rem 0.5rem',
+                            fontSize: '0.75rem',
+                            background: '#fff',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            color: '#2563eb',
+                          }}
+                          data-testid={`btn-upload-for-${req.documentTypeCode}`}
+                        >
+                          {req.activeDocument ? 'Replace' : 'Upload'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Active Documents List */}
+        {complianceData && complianceData.activeDocuments.length > 0 && (
+          <div style={{ marginTop: '1.5rem' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 0.5rem 0' }}>
+              Active Verified Documents
+            </h3>
+            <ul
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem',
+              }}
+            >
+              {complianceData.activeDocuments.map((doc) => (
+                <li
+                  key={doc.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0.6rem 0.75rem',
+                    background: '#f9fafb',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
+                  }}
+                  data-testid={`driver-doc-item-${doc.displayId}`}
+                >
+                  <div>
+                    <Link
+                      href={`/compliance/documents/${doc.id}`}
+                      style={{ fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}
+                    >
+                      {doc.displayId}
+                    </Link>
+                    {doc.documentNumber ? ` (${doc.documentNumber})` : ''} &bull;{' '}
+                    <span style={{ color: '#6b7280' }}>
+                      {doc.originalFileName} ({(doc.sizeBytes / 1024).toFixed(1)} KB)
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>
+                      {doc.expiresOn
+                        ? `Expires: ${new Date(doc.expiresOn).toLocaleDateString()}`
+                        : 'No expiry'}
+                    </span>
+                    <Link
+                      href={`/compliance/documents/${doc.id}`}
+                      style={{ color: '#2563eb', fontSize: '0.75rem', fontWeight: 500 }}
+                    >
+                      Manage &rarr;
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      {/* Upload Compliance Document Modal */}
+      {showUploadDocModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+          data-testid="modal-upload-compliance-doc"
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '8px',
+              padding: '1.5rem',
+              width: '100%',
+              maxWidth: '480px',
+            }}
+          >
+            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: 600 }}>
+              Upload Driver Compliance Document
+            </h3>
+            <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1rem' }}>
+              Upload an official certification file (PDF, PNG, or JPEG, max 10MB) for{' '}
+              {driver.firstName} {driver.lastName}.
+            </p>
+
+            {uploadError && (
+              <div
+                style={{
+                  padding: '0.75rem',
+                  marginBottom: '1rem',
+                  background: '#fee2e2',
+                  border: '1px solid #ef4444',
+                  borderRadius: '6px',
+                  color: '#991b1b',
+                  fontSize: '0.875rem',
+                }}
+                data-testid="upload-error-message"
+              >
+                {uploadError}
+              </div>
+            )}
+
+            <form onSubmit={handleUploadComplianceDoc}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    marginBottom: '0.25rem',
+                  }}
+                >
+                  Document Type *
+                </label>
+                <select
+                  required
+                  value={uploadDocTypeId}
+                  onChange={(e) => setUploadDocTypeId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '4px',
+                  }}
+                  data-testid="select-doc-type"
+                >
+                  <option value="">-- Choose document type --</option>
+                  {driverDocTypes.map((dt) => (
+                    <option key={dt.id} value={dt.id}>
+                      {dt.name} ({dt.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    marginBottom: '0.25rem',
+                  }}
+                >
+                  File *
+                </label>
+                <input
+                  type="file"
+                  required
+                  accept=".pdf,application/pdf,image/png,image/jpeg"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  style={{ width: '100%' }}
+                  data-testid="input-doc-file"
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    marginBottom: '0.25rem',
+                  }}
+                >
+                  Document Number
+                </label>
+                <input
+                  type="text"
+                  value={uploadDocNumber}
+                  onChange={(e) => setUploadDocNumber(e.target.value)}
+                  placeholder="e.g. MED-2026-999"
+                  style={{
+                    width: '100%',
+                    padding: '0.4rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '4px',
+                  }}
+                  data-testid="input-doc-number"
+                />
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '0.75rem',
+                  marginBottom: '1rem',
+                }}
+              >
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      marginBottom: '0.25rem',
+                    }}
+                  >
+                    Issued On
+                  </label>
+                  <input
+                    type="date"
+                    value={uploadIssuedOn}
+                    onChange={(e) => setUploadIssuedOn(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.4rem',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                    }}
+                    data-testid="input-doc-issued-on"
+                  />
+                </div>
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      marginBottom: '0.25rem',
+                    }}
+                  >
+                    Expires On
+                  </label>
+                  <input
+                    type="date"
+                    value={uploadExpiresOn}
+                    onChange={(e) => setUploadExpiresOn(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.4rem',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                    }}
+                    data-testid="input-doc-expires-on"
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '0.75rem',
+                  marginTop: '1.25rem',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowUploadDocModal(false)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    background: '#fff',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadSubmitting || !uploadFile || !uploadDocTypeId}
+                  style={{
+                    padding: '0.5rem 1.25rem',
+                    background: '#2563eb',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                  data-testid="btn-submit-upload-doc"
+                >
+                  {uploadSubmitting ? 'Uploading...' : 'Upload & Verify'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <section
         className="panel"

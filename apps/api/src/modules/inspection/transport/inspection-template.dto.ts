@@ -152,4 +152,3 @@ export class ListInspectionTemplatesQueryDto {
   @Min(0)
   offset?: number;
 }
-
