@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@vms/ui": "workspace:*",
-    "next": "16.3.1",
+    "next": "16.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -22,6 +22,6 @@
     "@playwright/test": "1.62.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
-    "vitest": "4.1.10"
+    "vitest": "5.0.2"
   }
 }
