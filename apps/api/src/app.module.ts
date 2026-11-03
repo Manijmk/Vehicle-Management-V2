@@ -15,6 +15,7 @@ import { IncidentModule } from './modules/incident/incident.module.js';
 import { InspectionModule } from './modules/inspection/inspection.module.js';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module.js';
 import { NotificationModule } from './modules/notification/notification.module.js';
+import { TelemetryModule } from './modules/telemetry/telemetry.module.js';
 import { TripModule } from './modules/trip/trip.module.js';
 import { VehicleModule } from './modules/vehicle/vehicle.module.js';
 
@@ -32,6 +33,7 @@ import { VehicleModule } from './modules/vehicle/vehicle.module.js';
     FinanceModule,
     IncidentModule,
     NotificationModule,
+    TelemetryModule,
   ],
   controllers: [HealthController],
   providers: [
