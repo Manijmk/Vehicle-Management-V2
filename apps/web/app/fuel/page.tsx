@@ -6,12 +6,14 @@ import { TenantHeader } from '../../components/tenant-header';
 import {
   financeApi,
   vehicleApi,
+  type CurrentUserResponse,
   type FuelTransactionRecord,
   type FuelTransactionStatus,
   type VehicleRecord,
 } from '../../lib/api-client';
 
 export default function FuelListPage() {
+  const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [transactions, setTransactions] = useState<FuelTransactionRecord[]>([]);
   const [vehicles, setVehicles] = useState<VehicleRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -28,7 +30,7 @@ export default function FuelListPage() {
     try {
       setLoading(true);
       setError(null);
-      const [txRes, vehRes] = await Promise.all([
+      const [txRes, vehRes, user] = await Promise.all([
         financeApi.fetchFuelTransactions({
           vehicleId: vehicleIdFilter || undefined,
           status: statusFilter || undefined,
@@ -36,10 +38,12 @@ export default function FuelListPage() {
           search: searchFilter || undefined,
         }),
         vehicleApi.fetchVehicles(),
+        vehicleApi.fetchCurrentUser().catch(() => null),
       ]);
       setTransactions(txRes.items);
       setTotal(txRes.total);
       setVehicles(vehRes);
+      setCurrentUser(user);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load fuel transactions');
     } finally {
@@ -50,6 +54,9 @@ export default function FuelListPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  const canCreate = Boolean(currentUser?.permissions.includes('fuel.create'));
+  const canImport = Boolean(currentUser?.permissions.includes('fuel.import'));
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem' }}>
@@ -76,34 +83,38 @@ export default function FuelListPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Link
-            href="/fuel/new"
-            style={{
-              padding: '0.5rem 1rem',
-              background: '#2563eb',
-              color: '#fff',
-              borderRadius: '6px',
-              textDecoration: 'none',
-              fontWeight: 500,
-            }}
-            data-testid="btn-log-fuel"
-          >
-            + Log Fuel
-          </Link>
-          <Link
-            href="/fuel/import"
-            style={{
-              padding: '0.5rem 1rem',
-              background: '#4f46e5',
-              color: '#fff',
-              borderRadius: '6px',
-              textDecoration: 'none',
-              fontWeight: 500,
-            }}
-            data-testid="btn-import-csv"
-          >
-            Import CSV
-          </Link>
+          {canCreate && (
+            <Link
+              href="/fuel/new"
+              style={{
+                padding: '0.5rem 1rem',
+                background: '#2563eb',
+                color: '#fff',
+                borderRadius: '6px',
+                textDecoration: 'none',
+                fontWeight: 500,
+              }}
+              data-testid="btn-log-fuel"
+            >
+              + Log Fuel
+            </Link>
+          )}
+          {canImport && (
+            <Link
+              href="/fuel/import"
+              style={{
+                padding: '0.5rem 1rem',
+                background: '#4f46e5',
+                color: '#fff',
+                borderRadius: '6px',
+                textDecoration: 'none',
+                fontWeight: 500,
+              }}
+              data-testid="btn-import-csv"
+            >
+              Import CSV
+            </Link>
+          )}
           <Link
             href="/finance"
             style={{

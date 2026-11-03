@@ -84,6 +84,24 @@ export const permissionDefinitions = [
   ['expense.manage', 'Post, void, and manage expense records'],
   ['expense.category.manage', 'Create and archive expense categories'],
   ['finance.receipt.download', 'Download finance receipt attachments'],
+  ['incident.read', 'Read incidents and status history'],
+  ['incident.create', 'Report new incidents'],
+  ['incident.update', 'Update incident details and severity'],
+  ['incident.investigate', 'Start incident investigations'],
+  ['incident.resolve', 'Resolve incidents with summary'],
+  ['incident.close', 'Close resolved incidents'],
+  ['incident.cancel', 'Cancel reported incidents with reason'],
+  ['incident.note.create', 'Add investigation notes to incidents'],
+  ['incident.attachment.upload', 'Upload evidence attachments to incidents'],
+  ['incident.attachment.download', 'Download evidence attachments from incidents'],
+  ['notification.read', 'Read in-app notifications and unread counts'],
+  ['notification.preference.update', 'Update personal notification delivery preferences'],
+  ['notification.template.read', 'Read notification templates'],
+  ['notification.template.manage', 'Create, update, and manage notification templates'],
+  ['telemetry.read', 'Read telemetry positions and vehicle history'],
+  ['telemetry.device.read', 'Read telemetry devices'],
+  ['telemetry.device.manage', 'Create and manage telemetry devices and assignments'],
+  ['telemetry.ingest', 'Ingest telemetry positions'],
 ] as const;
 
 async function seed(): Promise<void> {
@@ -207,6 +225,13 @@ async function seed(): Promise<void> {
       'finance.read',
       'fuel.read',
       'expense.read',
+      'incident.read',
+      'incident.attachment.download',
+      'notification.read',
+      'notification.preference.update',
+      'notification.template.read',
+      'telemetry.read',
+      'telemetry.device.read',
     ];
     await database.rolePermission.createMany({
       data: viewerCodes.map((code) => ({
@@ -557,6 +582,78 @@ async function seed(): Promise<void> {
           version: 1,
           createdBy: developmentSeed.userId,
           updatedBy: developmentSeed.userId,
+        },
+      });
+    }
+
+    const defaultTemplates = [
+      {
+        key: 'INCIDENT_CRITICAL_REPORTED',
+        category: 'INCIDENT' as const,
+        titleTemplate: 'Critical Incident Reported: {{displayId}}',
+        bodyTemplate:
+          'A critical incident has been reported: {{title}}. Occurred at {{occurredAt}}. Operational impact: {{operationalImpact}}. Description: {{description}}.',
+        description: 'Triggered when a CRITICAL severity incident is reported',
+      },
+      {
+        key: 'INSPECTION_CRITICAL_FAILURE',
+        category: 'CRITICAL_INSPECTION' as const,
+        titleTemplate: 'Critical Inspection Failure: {{vehicleDisplayId}}',
+        bodyTemplate:
+          'Inspection {{inspectionDisplayId}} failed with critical safety defects for vehicle {{vehicleDisplayId}}. Vehicle is operationally blocked.',
+        description: 'Triggered when an inspection encounters a critical failure item',
+      },
+      {
+        key: 'MAINTENANCE_WORK_ORDER_CREATED',
+        category: 'MAINTENANCE' as const,
+        titleTemplate: 'Work Order Created: {{workOrderDisplayId}}',
+        bodyTemplate:
+          'Work Order {{workOrderDisplayId}} has been created for vehicle {{vehicleDisplayId}}. Priority: {{priority}}. Title: {{title}}.',
+        description: 'Triggered when a maintenance work order is opened',
+      },
+      {
+        key: 'MAINTENANCE_WORK_ORDER_COMPLETED',
+        category: 'MAINTENANCE' as const,
+        titleTemplate: 'Work Order Completed: {{workOrderDisplayId}}',
+        bodyTemplate:
+          'Work Order {{workOrderDisplayId}} for vehicle {{vehicleDisplayId}} has been completed successfully.',
+        description: 'Triggered when a maintenance work order is completed',
+      },
+      {
+        key: 'COMPLIANCE_DOCUMENT_EXPIRING',
+        category: 'COMPLIANCE_EXPIRY' as const,
+        titleTemplate: 'Compliance Document Expiring: {{documentType}} ({{daysRemaining}} days)',
+        bodyTemplate:
+          'Compliance document {{documentType}} for {{subjectType}} {{subjectDisplayId}} will expire on {{expiryDate}} ({{daysRemaining}} days remaining). Please renew promptly.',
+        description:
+          'Triggered by scheduled automation when a document is within an expiry threshold',
+      },
+    ];
+
+    for (const [index, tmpl] of defaultTemplates.entries()) {
+      const id = `90000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+      await database.notificationTemplate.upsert({
+        where: {
+          organizationId_key: {
+            organizationId: developmentSeed.organizationId,
+            key: tmpl.key,
+          },
+        },
+        update: {
+          titleTemplate: tmpl.titleTemplate,
+          bodyTemplate: tmpl.bodyTemplate,
+          description: tmpl.description,
+        },
+        create: {
+          id,
+          organizationId: developmentSeed.organizationId,
+          key: tmpl.key,
+          category: tmpl.category,
+          titleTemplate: tmpl.titleTemplate,
+          bodyTemplate: tmpl.bodyTemplate,
+          description: tmpl.description,
+          enabled: true,
+          version: 1,
         },
       });
     }

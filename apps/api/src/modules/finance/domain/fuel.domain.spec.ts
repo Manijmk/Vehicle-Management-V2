@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { FuelQuantityUnit, FuelTransactionStatus, FuelType } from '@vms/database';
 import {
+  ConcurrencyConflictError,
+  EvidenceImmutableError,
   FuelTransactionAlreadyVoidedError,
   InvalidCurrencyCodeError,
   InvalidFuelTransactionStateError,
@@ -35,19 +37,38 @@ describe('FuelTransaction Domain Model', () => {
     expect(tx.voidReason).toBeNull();
   });
 
-  it('accepts a total amount matching quantity * unitPrice within tolerance', () => {
-    const tx = FuelTransaction.create({
+  it('supports explicit ISO 4217 currency fraction digits (USD=2, JPY=0, KWD=3)', () => {
+    // USD (2 fraction digits): 45.5 * 1.45 = 65.98
+    const txUsd = FuelTransaction.create({
       ...baseParams,
-      totalAmount: 66.0,
+      currencyCode: 'USD',
+      totalAmount: 65.98,
     });
-    expect(tx.totalAmount).toBe(66.0);
+    expect(txUsd.totalAmount).toBe(65.98);
+
+    // JPY (0 fraction digits): 45.5 * 1.45 = 66
+    const txJpy = FuelTransaction.create({
+      ...baseParams,
+      currencyCode: 'JPY',
+      totalAmount: 66,
+    });
+    expect(txJpy.totalAmount).toBe(66);
+
+    // KWD (3 fraction digits): 45.5 * 1.45 = 65.975
+    const txKwd = FuelTransaction.create({
+      ...baseParams,
+      currencyCode: 'KWD',
+      totalAmount: 65.975,
+    });
+    expect(txKwd.totalAmount).toBe(65.975);
   });
 
-  it('rejects total amount that differs significantly from calculated', () => {
+  it('rejects total amount that does not match exact calculated amount (no tolerance)', () => {
     expect(() =>
       FuelTransaction.create({
         ...baseParams,
-        totalAmount: 100.0,
+        currencyCode: 'USD',
+        totalAmount: 66.0, // Differed by 0.02, previously accepted by 0.05 tolerance, now strictly rejected
       }),
     ).toThrow(InvalidFuelTransactionStateError);
   });
@@ -124,7 +145,7 @@ describe('FuelTransaction Domain Model', () => {
     );
   });
 
-  it('attaches and detaches receipt', () => {
+  it('attaches receipt and enforces immutability once attached', () => {
     const tx = FuelTransaction.create(baseParams);
 
     tx.attachReceipt(
@@ -144,7 +165,35 @@ describe('FuelTransaction Domain Model', () => {
       sizeBytes: 1024,
     });
 
-    tx.detachReceipt('user-1');
-    expect(tx.receipt).toBeNull();
+    // Overwriting receipt must fail
+    expect(() =>
+      tx.attachReceipt(
+        {
+          storageKey: 'tenants/org-1/finance/fuel/receipt2.pdf',
+          fileName: 'receipt2.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 2048,
+        },
+        'user-1',
+      ),
+    ).toThrow(EvidenceImmutableError);
+
+    // Detaching receipt must fail
+    expect(() => tx.detachReceipt()).toThrow(EvidenceImmutableError);
+  });
+
+  it('enforces optimistic concurrency version on void', () => {
+    const tx = FuelTransaction.create(baseParams);
+    expect(tx.version).toBe(1);
+
+    // Version mismatch throws ConcurrencyConflictError
+    expect(() => tx.voidTransaction('Void attempt', 'user-1', 99)).toThrow(
+      ConcurrencyConflictError,
+    );
+
+    // Matching version succeeds and increments version
+    tx.voidTransaction('Void attempt', 'user-1', 1);
+    expect(tx.version).toBe(2);
+    expect(tx.status).toBe(FuelTransactionStatus.VOIDED);
   });
 });

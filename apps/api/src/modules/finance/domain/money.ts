@@ -1,36 +1,63 @@
-import { InvalidCurrencyCodeError } from './finance-errors.js';
+import {
+  assertValidCurrencyCode,
+  getCurrencyFractionDigits,
+  isSupportedCurrency,
+  ISO_4217_CURRENCIES,
+} from './currency-registry.js';
+import { ExactDecimal, type ExactDecimalInput } from './exact-decimal.js';
 
-export function assertValidCurrencyCode(code: string): string {
-  const normalized = code.trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(normalized)) {
-    throw new InvalidCurrencyCodeError(code);
-  }
-  return normalized;
+export {
+  assertValidCurrencyCode,
+  getCurrencyFractionDigits,
+  isSupportedCurrency,
+  ISO_4217_CURRENCIES,
+  ExactDecimal,
+  type ExactDecimalInput,
+};
+
+/**
+ * Calculates authoritative fuel transaction total amount using exact decimal arithmetic.
+ *
+ * Formula: totalAmount = round(quantity × unitPrice, currencyDecimals)
+ *
+ * Exact BigInt-backed decimal multiplication is used; zero IEEE-754 floating-point
+ * arithmetic or binary floating tolerance is permitted.
+ */
+export function calculateFuelTotalAmount(
+  quantity: ExactDecimalInput,
+  unitPrice: ExactDecimalInput,
+  currencyCode = 'USD',
+): ExactDecimal {
+  const decimals = getCurrencyFractionDigits(currencyCode);
+  const q = ExactDecimal.from(quantity);
+  const p = ExactDecimal.from(unitPrice);
+  const total = q.mul(p);
+  return total.round(decimals);
 }
 
-export function roundTo2Decimals(value: number): number {
-  return Number(Math.round(Number(`${value}e+2`)) + 'e-2');
+/**
+ * Rounds monetary amounts to the exact minor unit (fraction digits) defined
+ * by the authoritative ISO 4217 registry for the specified currency code.
+ */
+export function roundMoneyToCurrency(
+  amount: ExactDecimalInput,
+  currencyCode: string,
+): ExactDecimal {
+  const decimals = getCurrencyFractionDigits(currencyCode);
+  return ExactDecimal.from(amount).round(decimals);
 }
 
-export function roundTo3Decimals(value: number): number {
-  return Number(Math.round(Number(`${value}e+3`)) + 'e-3');
+/**
+ * Utility rounding functions for non-monetary quantities and rates using exact decimal arithmetic.
+ */
+export function roundTo2Decimals(value: ExactDecimalInput): ExactDecimal {
+  return ExactDecimal.from(value).round(2);
 }
 
-export function roundTo4Decimals(value: number): number {
-  return Number(Math.round(Number(`${value}e+4`)) + 'e-4');
+export function roundTo3Decimals(value: ExactDecimalInput): ExactDecimal {
+  return ExactDecimal.from(value).round(3);
 }
 
-export function calculateFuelTotalAmount(quantity: number, unitPrice: number): number {
-  const qInt = Math.round(quantity * 1000);
-  const pInt = Math.round(unitPrice * 10000);
-  const cents = Math.round((qInt * pInt) / 100000);
-  return cents / 100;
-}
-
-export function isAmountWithinTolerance(
-  expected: number,
-  actual: number,
-  tolerance = 0.05,
-): boolean {
-  return Math.abs(expected - actual) <= tolerance;
+export function roundTo4Decimals(value: ExactDecimalInput): ExactDecimal {
+  return ExactDecimal.from(value).round(4);
 }

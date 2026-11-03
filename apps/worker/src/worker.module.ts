@@ -8,6 +8,17 @@ import { OutboxProcessorService } from './outbox/outbox-processor.service.js';
 import { PrismaOutboxStore } from './outbox/prisma-outbox.store.js';
 import { EVENT_PUBLISHER, OUTBOX_STORE, WORKER_CONFIG, WORKER_DATABASE } from './outbox/tokens.js';
 import { DatabaseShutdownService } from './outbox/database-shutdown.service.js';
+import {
+  LogEmailNotificationProvider,
+  LogSmsNotificationProvider,
+} from './notifications/log-delivery-providers.js';
+import {
+  NotificationDeliveryService,
+  WORKER_EMAIL_PROVIDER,
+  WORKER_SMS_PROVIDER,
+} from './notifications/notification-delivery.service.js';
+import { NotificationRuleEvaluatorService } from './notifications/notification-rule-evaluator.service.js';
+import { ComplianceExpirySchedulerService } from './notifications/compliance-expiry-scheduler.service.js';
 
 @Module({
   providers: [
@@ -25,6 +36,20 @@ import { DatabaseShutdownService } from './outbox/database-shutdown.service.js';
     },
     { provide: OUTBOX_STORE, useExisting: PrismaOutboxStore },
     { provide: EVENT_PUBLISHER, useExisting: LoggingEventPublisher },
+
+    // Notification and Automation services
+    LogEmailNotificationProvider,
+    LogSmsNotificationProvider,
+    { provide: WORKER_EMAIL_PROVIDER, useExisting: LogEmailNotificationProvider },
+    { provide: WORKER_SMS_PROVIDER, useExisting: LogSmsNotificationProvider },
+    NotificationDeliveryService,
+    NotificationRuleEvaluatorService,
+    ComplianceExpirySchedulerService,
+  ],
+  exports: [
+    NotificationDeliveryService,
+    NotificationRuleEvaluatorService,
+    ComplianceExpirySchedulerService,
   ],
 })
 export class WorkerModule {}

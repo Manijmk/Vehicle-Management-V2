@@ -7,6 +7,7 @@ export interface PutObjectParams {
 export interface GetSignedUrlParams {
   objectKey: string;
   expiresInSeconds: number;
+  fileName?: string | undefined;
 }
 
 export interface ObjectStoragePort {

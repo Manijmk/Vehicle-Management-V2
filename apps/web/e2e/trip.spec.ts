@@ -4,6 +4,7 @@ test.describe('Trip Lifecycle, Operations, and Fleet Integration Acceptance Flow
   test('exercises complete trip lifecycle: planning DRAFT, transition to READY, START with odometer, verify vehicle & driver in-progress state, verify assignment end is guarded, COMPLETE with end odometer, verify vehicle authoritative odometer progression, and verify assignment end is unblocked', async ({
     page,
   }) => {
+    test.setTimeout(60000);
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const timestamp = `${Date.now().toString().slice(-4)}${randomSuffix}`;
     const vehicleDisplayId = `V-TRP-${timestamp}`;

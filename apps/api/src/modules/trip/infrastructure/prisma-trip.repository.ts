@@ -539,6 +539,14 @@ export class PrismaTripRepository implements TripRepository {
         new Date(),
       );
 
+      // Milestone 10: Operational Incident Gate (Vehicle & Driver)
+      await this.assertVehicleAndDriverIncidentAvailability(
+        tx,
+        input.organizationId,
+        trip.vehicleId,
+        trip.driverId,
+      );
+
       const updateResult = await tx.trip.updateMany({
         where: {
           id: input.tripId,
@@ -671,6 +679,14 @@ export class PrismaTripRepository implements TripRepository {
         trip.vehicleId,
         trip.driverId,
         new Date(),
+      );
+
+      // Milestone 10: Operational Incident Gate (Vehicle & Driver re-validation at START)
+      await this.assertVehicleAndDriverIncidentAvailability(
+        tx,
+        input.organizationId,
+        trip.vehicleId,
+        trip.driverId,
       );
 
       // Milestone 6: Pre-Trip Inspection Gate
@@ -1421,6 +1437,45 @@ export class PrismaTripRepository implements TripRepository {
           );
         }
       }
+    }
+  }
+
+  private async assertVehicleAndDriverIncidentAvailability(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    vehicleId: string,
+    driverId: string,
+  ): Promise<void> {
+    const blockingVehicleIncident = await tx.incident.findFirst({
+      where: {
+        organizationId,
+        vehicleId,
+        status: { in: ['REPORTED', 'INVESTIGATING'] },
+        operationalImpact: { in: ['VEHICLE', 'BOTH'] },
+      },
+      select: { id: true, displayId: true },
+    });
+    if (blockingVehicleIncident) {
+      throw new ApplicationError(
+        'VEHICLE_BLOCKED_BY_INCIDENT',
+        `Vehicle is operationally blocked by unresolved incident ${blockingVehicleIncident.displayId}`,
+      );
+    }
+
+    const blockingDriverIncident = await tx.incident.findFirst({
+      where: {
+        organizationId,
+        driverId,
+        status: { in: ['REPORTED', 'INVESTIGATING'] },
+        operationalImpact: { in: ['DRIVER', 'BOTH'] },
+      },
+      select: { id: true, displayId: true },
+    });
+    if (blockingDriverIncident) {
+      throw new ApplicationError(
+        'DRIVER_BLOCKED_BY_INCIDENT',
+        `Driver is operationally blocked by unresolved incident ${blockingDriverIncident.displayId}`,
+      );
     }
   }
 }

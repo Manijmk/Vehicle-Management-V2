@@ -9,10 +9,12 @@ import {
   ApiClientError,
   complianceApi,
   financeApi,
+  incidentApi,
   maintenanceApi,
   tripApi,
   vehicleApi,
   type CurrentUserResponse,
+  type IncidentRecord,
   type InspectionRecord,
   type SubjectComplianceResponse,
   type TripFinanceSummaryResponse,
@@ -37,6 +39,7 @@ export default function TripDetailPage() {
   );
   const [driverCompliance, setDriverCompliance] = useState<SubjectComplianceResponse | null>(null);
   const [tripFinance, setTripFinance] = useState<TripFinanceSummaryResponse | null>(null);
+  const [tripIncidents, setTripIncidents] = useState<IncidentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
@@ -65,7 +68,7 @@ export default function TripDetailPage() {
       setLoading(true);
       setError(null);
       setConflictMessage(null);
-      const [t, hist, inspRes, user, mSummary, vComp, dComp, finRes] = await Promise.all([
+      const [t, hist, inspRes, user, mSummary, vComp, dComp, finRes, incRes] = await Promise.all([
         tripApi.fetchTrip(tripId),
         tripApi.fetchTripStatusHistory(tripId).catch(() => []),
         api.fetchTripInspections(tripId).catch(() => ({ items: [], total: 0 })),
@@ -93,6 +96,7 @@ export default function TripDetailPage() {
           )
           .catch(() => null),
         financeApi.fetchTripFinance(tripId).catch(() => null),
+        incidentApi.fetchTripIncidents(tripId, 20).catch(() => ({ items: [], total: 0 })),
       ]);
       setTrip(t);
       setHistory(hist);
@@ -102,6 +106,7 @@ export default function TripDetailPage() {
       setVehicleCompliance(vComp);
       setDriverCompliance(dComp);
       setTripFinance(finRes);
+      setTripIncidents(incRes?.items ?? []);
 
       const defaultOdo = t.vehicle?.odometerKm ?? t.startOdometerKm ?? 0;
       setStartOdo(defaultOdo);
@@ -245,6 +250,14 @@ export default function TripDetailPage() {
         setActionError('Driver is no longer operationally eligible (valid license required).');
       } else if (err.code === 'VEHICLE_BLOCKED_BY_MAINTENANCE') {
         setActionError('Vehicle is blocked by active maintenance and cannot be dispatched.');
+      } else if (err.code === 'VEHICLE_BLOCKED_BY_INCIDENT') {
+        setActionError(
+          err.message || 'Vehicle is blocked by an active incident and cannot be dispatched.',
+        );
+      } else if (err.code === 'DRIVER_BLOCKED_BY_INCIDENT') {
+        setActionError(
+          err.message || 'Driver is blocked by an active incident and cannot be dispatched.',
+        );
       } else {
         setActionError(err.message || defaultMsg);
       }
@@ -1244,6 +1257,7 @@ export default function TripDetailPage() {
                   style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}
                 >
                   <table
+                    data-testid="trip-fuel-table"
                     style={{
                       width: '100%',
                       borderCollapse: 'collapse',
@@ -1320,6 +1334,7 @@ export default function TripDetailPage() {
                   style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}
                 >
                   <table
+                    data-testid="trip-expenses-table"
                     style={{
                       width: '100%',
                       borderCollapse: 'collapse',
@@ -1376,6 +1391,88 @@ export default function TripDetailPage() {
               )}
             </div>
           </>
+        )}
+      </section>
+
+      {/* Incidents Section */}
+      <section
+        className="panel"
+        data-testid="trip-incidents-section"
+        style={{ marginTop: '1.5rem' }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1rem',
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: '1.25rem' }}>
+            Incidents & Collisions ({tripIncidents.length})
+          </h2>
+          <Link
+            href="/incidents/new"
+            style={{
+              padding: '0.4rem 0.8rem',
+              background: '#dc2626',
+              color: '#fff',
+              borderRadius: '6px',
+              textDecoration: 'none',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+            }}
+          >
+            + Report Incident
+          </Link>
+        </div>
+
+        {tripIncidents.length === 0 ? (
+          <p style={{ color: '#6b7280', margin: 0 }}>No incidents recorded on this trip route.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+              <thead>
+                <tr
+                  style={{
+                    background: '#f9fafb',
+                    borderBottom: '1px solid #e5e7eb',
+                    textAlign: 'left',
+                  }}
+                >
+                  <th style={{ padding: '0.5rem 0.75rem' }}>ID</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Title</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Type</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Severity</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Status</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Impact</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Occurred</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tripIncidents.map((inc) => (
+                  <tr key={inc.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600 }}>
+                      <Link
+                        href={`/incidents/${inc.id}`}
+                        style={{ color: '#2563eb', textDecoration: 'none' }}
+                      >
+                        {inc.displayId}
+                      </Link>
+                    </td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{inc.title}</td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{inc.type}</td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{inc.severity}</td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{inc.status}</td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{inc.operationalImpact}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', color: '#6b7280' }}>
+                      {new Date(inc.occurredAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </main>

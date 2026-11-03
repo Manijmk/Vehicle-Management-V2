@@ -31,6 +31,7 @@ import { FinanceService } from '../application/finance.service.js';
 import {
   CreateExpenseDto,
   ListExpensesQueryDto,
+  PostExpenseDto,
   UpdateExpenseDraftDto,
   VoidExpenseDto,
 } from './finance.dto.js';
@@ -157,10 +158,12 @@ export class ExpenseController {
   async postExpense(
     @Req() req: AuthenticatedRequest,
     @Param('expenseId', new ParseUUIDPipe()) expenseId: string,
+    @Body() dto?: PostExpenseDto,
   ) {
     return this.financeService.postExpense(
       req.tenant!.organizationId,
       expenseId,
+      dto,
       mutationMetadata(req),
     );
   }

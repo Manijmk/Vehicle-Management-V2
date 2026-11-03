@@ -110,6 +110,19 @@ export interface ExpenseCategoryDetail {
   updatedAt: Date;
 }
 
+export interface FuelImportJobDetail {
+  id: string;
+  organizationId: string;
+  fileName: string;
+  totalRows: number;
+  importedRows: number;
+  failedRows: number;
+  status: string;
+  errorSummary?: string | null;
+  idempotencyChecksum?: string | null;
+  createdAt: Date;
+}
+
 export interface ExpenseDetail {
   id: string;
   organizationId: string;
@@ -197,6 +210,7 @@ export interface CategorySpendSummary {
   currencyCode: string;
   totalAmount: number;
   expenseCount: number;
+  percentage?: number;
 }
 
 export interface VehicleSpendSummary {
@@ -266,8 +280,41 @@ export interface FinanceRepository {
     vehicleId: string,
     referenceNumber?: string | null,
     energyType?: FuelType,
+    currencyCode?: string,
+    quantityUnit?: FuelQuantityUnit,
     occurredAt?: Date,
   ): Promise<HistoricalFuelContext>;
+
+  // Fuel Import Jobs
+  findFuelImportJobByChecksum(
+    organizationId: string,
+    checksum: string,
+  ): Promise<FuelImportJobDetail | null>;
+  createFuelImportJob(data: {
+    id: string;
+    organizationId: string;
+    fileName: string;
+    totalRows: number;
+    importedRows: number;
+    failedRows: number;
+    status: string;
+    errorSummary?: string | null;
+    idempotencyChecksum?: string | null;
+    createdById: string;
+  }): Promise<FuelImportJobDetail>;
+  updateFuelImportJob(
+    id: string,
+    data: {
+      importedRows: number;
+      failedRows: number;
+      status: string;
+      errorSummary?: string | null;
+    },
+  ): Promise<void>;
+  listFuelTransactionsByBatchId(
+    organizationId: string,
+    batchId: string,
+  ): Promise<FuelTransactionDetail[]>;
 
   // Expenses
   allocateExpenseDisplayId(organizationId: string): Promise<string>;

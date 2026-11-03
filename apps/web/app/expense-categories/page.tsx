@@ -3,9 +3,15 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { TenantHeader } from '../../components/tenant-header';
-import { financeApi, type ExpenseCategoryRecord } from '../../lib/api-client';
+import {
+  financeApi,
+  vehicleApi,
+  type CurrentUserResponse,
+  type ExpenseCategoryRecord,
+} from '../../lib/api-client';
 
 export default function ExpenseCategoriesPage() {
+  const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [categories, setCategories] = useState<ExpenseCategoryRecord[]>([]);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -22,8 +28,12 @@ export default function ExpenseCategoriesPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await financeApi.fetchExpenseCategories(includeArchived);
+      const [res, user] = await Promise.all([
+        financeApi.fetchExpenseCategories(includeArchived),
+        vehicleApi.fetchCurrentUser().catch(() => null),
+      ]);
       setCategories(res);
+      setCurrentUser(user);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load expense categories');
     } finally {
@@ -34,6 +44,8 @@ export default function ExpenseCategoriesPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  const canManage = Boolean(currentUser?.permissions.includes('expense.category.manage'));
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,50 +160,78 @@ export default function ExpenseCategoriesPage() {
       )}
 
       {/* Create New Category Card */}
-      <div
-        style={{
-          background: '#fff',
-          border: '1px solid #e5e7eb',
-          borderRadius: '8px',
-          padding: '1.5rem',
-          marginBottom: '1.5rem',
-        }}
-      >
-        <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.125rem', fontWeight: 600 }}>
-          Add New Expense Category
-        </h3>
-        <form
-          onSubmit={handleCreate}
-          style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
-          data-testid="create-category-form"
+      {canManage && (
+        <div
+          style={{
+            background: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            padding: '1.5rem',
+            marginBottom: '1.5rem',
+          }}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  marginBottom: '0.25rem',
-                }}
-              >
-                Code *
-              </label>
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. FERRY_TOLL"
-                required
-                style={{
-                  width: '100%',
-                  padding: '0.5rem',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  textTransform: 'uppercase',
-                }}
-                data-testid="input-category-code"
-              />
+          <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.125rem', fontWeight: 600 }}>
+            Add New Expense Category
+          </h3>
+          <form
+            onSubmit={handleCreate}
+            style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
+            data-testid="create-category-form"
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    marginBottom: '0.25rem',
+                  }}
+                >
+                  Code *
+                </label>
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. FERRY_TOLL"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    textTransform: 'uppercase',
+                  }}
+                  data-testid="input-category-code"
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    marginBottom: '0.25rem',
+                  }}
+                >
+                  Category Name *
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Ferry Crossings"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                  }}
+                  data-testid="input-category-name"
+                />
+              </div>
             </div>
             <div>
               <label
@@ -202,69 +242,43 @@ export default function ExpenseCategoriesPage() {
                   marginBottom: '0.25rem',
                 }}
               >
-                Category Name *
+                Description
               </label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Ferry Crossings"
-                required
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="e.g. Coastal and river ferry transport fees"
                 style={{
                   width: '100%',
                   padding: '0.5rem',
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                 }}
-                data-testid="input-category-name"
+                data-testid="input-category-description"
               />
             </div>
-          </div>
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                marginBottom: '0.25rem',
-              }}
-            >
-              Description
-            </label>
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Coastal and river ferry transport fees"
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-              }}
-              data-testid="input-category-description"
-            />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              type="submit"
-              disabled={creating || !code.trim() || !name.trim()}
-              style={{
-                padding: '0.5rem 1.25rem',
-                background: creating ? '#93c5fd' : '#2563eb',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: 600,
-                cursor: creating || !code.trim() || !name.trim() ? 'not-allowed' : 'pointer',
-              }}
-              data-testid="btn-create-category"
-            >
-              {creating ? 'Saving...' : 'Create Category'}
-            </button>
-          </div>
-        </form>
-      </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="submit"
+                disabled={creating || !code.trim() || !name.trim()}
+                style={{
+                  padding: '0.5rem 1.25rem',
+                  background: creating ? '#93c5fd' : '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  cursor: creating || !code.trim() || !name.trim() ? 'not-allowed' : 'pointer',
+                }}
+                data-testid="btn-create-category"
+              >
+                {creating ? 'Saving...' : 'Create Category'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Filter Options */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
@@ -345,7 +359,7 @@ export default function ExpenseCategoriesPage() {
                     </span>
                   </td>
                   <td style={{ padding: '0.75rem 1rem' }}>
-                    {c.status === 'ACTIVE' && (
+                    {c.status === 'ACTIVE' && canManage && (
                       <button
                         type="button"
                         onClick={() => handleArchive(c.id, c.name)}

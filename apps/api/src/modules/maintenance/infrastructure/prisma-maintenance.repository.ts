@@ -259,6 +259,35 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
         }
       }
 
+      if (input.sourceIncidentId) {
+        const incident = await tx.incident.findFirst({
+          where: { id: input.sourceIncidentId, organizationId: input.organizationId },
+        });
+        if (!incident) {
+          throw new ApplicationError(
+            'INCIDENT_NOT_FOUND',
+            'Incident was not found in this organization',
+          );
+        }
+
+        // Idempotency check for incident-derived requests
+        const existingForIncident = await tx.maintenanceRequest.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            sourceIncidentId: input.sourceIncidentId,
+          },
+          include: {
+            vehicle: true,
+            sourceInspection: true,
+            sourceIncident: true,
+            convertedWorkOrder: true,
+          },
+        });
+        if (existingForIncident) {
+          return this.mapRequest(existingForIncident);
+        }
+      }
+
       const displayId = await this.allocateDisplayId(
         tx,
         input.organizationId,
@@ -275,6 +304,7 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
           vehicleId: input.vehicleId,
           sourceType: input.sourceType,
           sourceInspectionId: input.sourceInspectionId ?? null,
+          sourceIncidentId: input.sourceIncidentId ?? null,
           title: input.title.trim(),
           description: input.description?.trim() || null,
           priority,
@@ -287,6 +317,7 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
         include: {
           vehicle: true,
           sourceInspection: true,
+          sourceIncident: true,
           convertedWorkOrder: true,
         },
       });
@@ -328,6 +359,7 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
       include: {
         vehicle: true,
         sourceInspection: true,
+        sourceIncident: true,
         convertedWorkOrder: true,
       },
     });
@@ -343,6 +375,23 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
       include: {
         vehicle: true,
         sourceInspection: true,
+        sourceIncident: true,
+        convertedWorkOrder: true,
+      },
+    });
+    return raw ? this.mapRequest(raw) : null;
+  }
+
+  async findRequestByIncident(
+    incidentId: string,
+    organizationId: string,
+  ): Promise<MaintenanceRequestDetail | null> {
+    const raw = await this.database.maintenanceRequest.findFirst({
+      where: { sourceIncidentId: incidentId, organizationId },
+      include: {
+        vehicle: true,
+        sourceInspection: true,
+        sourceIncident: true,
         convertedWorkOrder: true,
       },
     });
@@ -380,6 +429,7 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
         include: {
           vehicle: true,
           sourceInspection: true,
+          sourceIncident: true,
           convertedWorkOrder: true,
         },
         orderBy: { createdAt: 'desc' },
@@ -402,6 +452,7 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
         include: {
           vehicle: true,
           sourceInspection: true,
+          sourceIncident: true,
           convertedWorkOrder: true,
         },
       });
@@ -447,6 +498,7 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
         include: {
           vehicle: true,
           sourceInspection: true,
+          sourceIncident: true,
           convertedWorkOrder: true,
         },
       });
@@ -479,6 +531,7 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
         include: {
           vehicle: true,
           sourceInspection: true,
+          sourceIncident: true,
           convertedWorkOrder: true,
         },
       });
@@ -568,6 +621,7 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
         include: {
           vehicle: true,
           sourceInspection: true,
+          sourceIncident: true,
           convertedWorkOrder: true,
         },
       });
@@ -622,6 +676,7 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
         include: {
           vehicle: true,
           sourceInspection: true,
+          sourceIncident: true,
           convertedWorkOrder: true,
         },
       });
@@ -656,6 +711,7 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
         include: {
           vehicle: true,
           sourceInspection: true,
+          sourceIncident: true,
           convertedWorkOrder: true,
         },
       });
@@ -2360,6 +2416,8 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
     sourceType: string;
     sourceInspectionId?: string | null;
     sourceInspection?: { displayId?: string | null } | null;
+    sourceIncidentId?: string | null;
+    sourceIncident?: { displayId?: string | null } | null;
     title: string;
     description?: string | null;
     priority: string;
@@ -2383,6 +2441,8 @@ export class PrismaMaintenanceRepository implements MaintenanceRepository {
       sourceType: raw.sourceType as MaintenanceRequestSource,
       sourceInspectionId: raw.sourceInspectionId ?? null,
       sourceInspectionDisplayId: raw.sourceInspection?.displayId ?? null,
+      sourceIncidentId: raw.sourceIncidentId ?? null,
+      sourceIncidentDisplayId: raw.sourceIncident?.displayId ?? null,
       title: raw.title,
       description: raw.description ?? null,
       priority: raw.priority as MaintenancePriority,

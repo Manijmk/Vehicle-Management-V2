@@ -94,3 +94,48 @@ export class ReceiptStorageError extends FinanceError {
     super('RECEIPT_STORAGE_ERROR', message, original);
   }
 }
+
+export class EvidenceImmutableError extends FinanceError {
+  constructor(message: string) {
+    super('EVIDENCE_IMMUTABLE', message);
+  }
+}
+
+export class DuplicateImportError extends FinanceError {
+  constructor(message: string) {
+    super('DUPLICATE_IMPORT', message);
+  }
+}
+
+export class TripVehicleMismatchError extends FinanceError {
+  constructor(tripVehicleId: string, providedVehicleId: string) {
+    super(
+      'TRIP_VEHICLE_MISMATCH',
+      `Provided vehicle '${providedVehicleId}' does not match trip vehicle '${tripVehicleId}'`,
+    );
+  }
+}
+
+export class TripDriverMismatchError extends FinanceError {
+  constructor(tripDriverId: string, providedDriverId: string) {
+    super(
+      'TRIP_DRIVER_MISMATCH',
+      `Provided driver '${providedDriverId}' does not match trip driver '${tripDriverId}'`,
+    );
+  }
+}
+
+export class WorkOrderVehicleMismatchError extends FinanceError {
+  constructor(workOrderVehicleId: string, providedVehicleId: string) {
+    super(
+      'WORK_ORDER_VEHICLE_MISMATCH',
+      `Provided vehicle '${providedVehicleId}' does not match work order vehicle '${workOrderVehicleId}'`,
+    );
+  }
+}
+
+export class ConcurrencyConflictError extends FinanceError {
+  constructor(message = 'Resource was modified by another operation') {
+    super('CONCURRENCY_CONFLICT', message);
+  }
+}

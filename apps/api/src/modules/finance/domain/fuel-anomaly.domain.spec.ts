@@ -127,4 +127,3 @@ describe('Fuel Anomaly Detector', () => {
     expect(anomaliesLow.some((a) => a.code === FuelAnomalyCode.UNUSUAL_UNIT_PRICE)).toBe(true);
   });
 });
-

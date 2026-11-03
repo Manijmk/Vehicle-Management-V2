@@ -87,6 +87,13 @@ export class MaintenanceService implements VehicleMaintenanceGate {
     return this.repository.findRequestByInspection(inspectionId, organizationId);
   }
 
+  async getRequestByIncident(
+    incidentId: string,
+    organizationId: string,
+  ): Promise<MaintenanceRequestDetail | null> {
+    return this.repository.findRequestByIncident(incidentId, organizationId);
+  }
+
   async listRequests(
     organizationId: string,
     filter?: ListMaintenanceRequestsFilter,

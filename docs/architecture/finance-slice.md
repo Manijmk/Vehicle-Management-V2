@@ -88,7 +88,21 @@ Infrastructure Adapters (PrismaFinanceRepository, S3ObjectStorageAdapter)
 
 ## 3. Database Schema and Multi-Tenancy
 
-Checked-in migration: `20261111000000_finance_fuel_expenses`
+Checked-in migration: `20261111000000_finance_fuel_expenses` followed by corrective migration `20261111120000_finance_integrity`.
+
+Full chronological sequence verified from `packages/database/prisma/migrations`:
+
+1. `20260818000000_foundation`
+2. `20260818115052_identity_organization_foundation`
+3. `20260919000000_vehicle`
+4. `20260929000000_driver`
+5. `20260929120000_assignment`
+6. `20261019000000_trip`
+7. `20261029000000_inspection`
+8. `20261109000000_maintenance`
+9. `20261110000000_compliance_documents`
+10. `20261111000000_finance_fuel_expenses`
+11. `20261111120000_finance_integrity`
 
 ### Key Constraints & Indexes
 
@@ -136,6 +150,45 @@ Checked-in migration: `20261111000000_finance_fuel_expenses`
 - `FUTURE_TRANSACTION_DATE`: The transaction timestamp is in the future.
 - `ZERO_DISTANCE_REFUEL`: Consecutive refuels have identical odometer values.
 - `UNUSUAL_UNIT_PRICE`: Unit price diverges by more than 2.5x from the 90-day moving average for that energy type.
+
+### Anomaly Vocabulary Reconciliation & Design Decisions
+
+The PostgreSQL schema and domain model define exactly six authoritative anomaly codes:
+
+1. `ODOMETER_REGRESSION`
+2. `DUPLICATE_REFERENCE`
+3. `DUPLICATE_TRANSACTION`
+4. `FUTURE_TRANSACTION_DATE`
+5. `ZERO_DISTANCE_REFUEL`
+6. `UNUSUAL_UNIT_PRICE`
+
+**Design Decision: Deferred Tank Capacity Anomaly (`EXCESS_CAPACITY`)**:
+The core `Vehicle` domain aggregate tracks operational attributes (VIN, license plate, make, model, year, status, authoritative odometer) but does not model fuel tank volume or battery pack kWh capacity. Because no authoritative vehicle specification exists in the system to define tank size, attempting to flag fuel quantity against an arbitrary or non-authoritative number would lead to spurious false-positive anomalies. In adherence to VMS architecture invariants, fuel volume checks against tank capacity are deferred until vehicle asset specifications are formalized in a future milestone.
+
+### Currency Registry & Exact Decimal Financial Authority
+
+To guarantee financial integrity and eliminate binary floating-point rounding drift:
+
+1. **ISO 4217 Currency Registry (`currency-registry.ts`)**:
+   - Maintains an authoritative catalog of active ISO 4217 world currencies (`ISO_4217_CURRENCIES`) with their official decimal fraction digits (e.g., 2 for USD/EUR, 0 for JPY/KRW, 3 for KWD/BHD).
+   - Inbound currency codes are strictly validated via `assertValidCurrencyCode(code)`. Fictitious codes (e.g., `ABC`, `ZZZ`) are rejected with `INVALID_CURRENCY_CODE` (HTTP 400).
+2. **Exact Decimal Arithmetic (`exact-decimal.ts`)**:
+   - All financial multiplications, divisions, additions, and subtractions are executed via a custom arbitrary-precision `ExactDecimal` value object backed by scaled `BigInt`.
+   - IEEE-754 binary floating-point operations (`number`) are completely avoided during financial rule evaluation.
+   - Total amount validation enforces exact mathematical identity: `quantity * unitPrice == totalAmount`. Loose floating-point tolerances (such as `±0.05`) are forbidden.
+3. **Money Transport Boundary and Serialization**:
+   - **Input Validation & Bounds**: REST DTOs accept monetary and quantity inputs as bounded JSON numbers:
+     - `quantity`: bounded by `@Min(0.001)` and `@Max(999999999.999)` matching database `Decimal(12, 3)`.
+     - `unitPrice`: bounded by `@Min(0)` and `@Max(99999999.9999)` matching database `Decimal(12, 4)`.
+     - `totalAmount` & Expense `amount`: bounded by `@Min(0.0001)` and `@Max(9999999999.9999)` matching database `Decimal(14, 4)`.
+   - **Lossless Conversion Proof**: Standard IEEE-754 double precision floats support up to 53 bits of mantissa ($9,007,199,254,740,991 \approx 9 \times 10^{15}$, or 15–17 decimal digits). The largest supported financial amount ($9,999,999,999.9999$) requires exactly 14 decimal digits when scaled to integer subunits ($99,999,999,999,999$), strictly below $9,007,199,254,740,991$. As proven by unit boundary tests, conversion from input `number` into `ExactDecimal` is 100% lossless across all supported values.
+   - **API Output Serialization**: Returned values are serialized as JSON numbers rounded strictly to the minor unit fraction digits declared by the currency's ISO 4217 definition (e.g. 2 for USD, 0 for JPY, 3 for KWD).
+
+4. **Receipt Security and Download Flow**:
+   - Presigned download URLs are generated dynamically with a 15-minute TTL.
+   - S3/MinIO `GetObjectCommand` specifies `ResponseContentDisposition: attachment; filename="..."` to force client-side download without rendering sensitive receipt bytes inline.
+   - The frontend never renders raw S3 keys, permanent public URLs, or bucket hosts into the DOM.
+   - Downloading receipts requires the explicit `finance.receipt.download` permission (granted to Organization Admin and Manager roles; denied to Viewer).
 
 ### Fuel Efficiency Formulas
 

@@ -1,10 +1,12 @@
 import { ExpenseStatus } from '@vms/database';
 import {
+  ConcurrencyConflictError,
+  EvidenceImmutableError,
   ExpenseAlreadyPostedError,
   ExpenseAlreadyVoidedError,
   InvalidExpenseStateError,
 } from './finance-errors.js';
-import { assertValidCurrencyCode, roundTo2Decimals } from './money.js';
+import { assertValidCurrencyCode, roundMoneyToCurrency } from './money.js';
 
 export interface ExpenseReceiptInfo {
   storageKey: string;
@@ -132,8 +134,8 @@ export class Expense {
     if (params.amount <= 0) {
       throw new InvalidExpenseStateError('Expense amount must be greater than 0');
     }
-    const roundedAmount = roundTo2Decimals(params.amount);
     const validatedCurrency = assertValidCurrencyCode(params.currencyCode);
+    const roundedAmount = roundMoneyToCurrency(params.amount, validatedCurrency).toNumber();
 
     const cleanDescription = params.description.trim();
     if (!cleanDescription || cleanDescription.length > 500) {
@@ -250,7 +252,10 @@ export class Expense {
       if (params.amount <= 0) {
         throw new InvalidExpenseStateError('Expense amount must be greater than 0');
       }
-      this._amount = roundTo2Decimals(params.amount);
+      const targetCurrency = params.currencyCode
+        ? assertValidCurrencyCode(params.currencyCode)
+        : this._currencyCode;
+      this._amount = roundMoneyToCurrency(params.amount, targetCurrency).toNumber();
     }
     if (params.currencyCode !== undefined) {
       this._currencyCode = assertValidCurrencyCode(params.currencyCode);
@@ -275,12 +280,17 @@ export class Expense {
     this._version += 1;
   }
 
-  public post(postedBy: string, postedAt = new Date()): void {
+  public post(postedBy: string, expectedVersion?: number, postedAt = new Date()): void {
     if (this._status === ExpenseStatus.POSTED) {
       return;
     }
     if (this._status === ExpenseStatus.VOIDED) {
       throw new ExpenseAlreadyVoidedError(this.id);
+    }
+    if (expectedVersion !== undefined && expectedVersion !== this._version) {
+      throw new ConcurrencyConflictError(
+        `Expense version conflict. Expected version ${expectedVersion}, current version ${this._version}`,
+      );
     }
 
     this._status = ExpenseStatus.POSTED;
@@ -289,9 +299,19 @@ export class Expense {
     this._version += 1;
   }
 
-  public voidExpense(reason: string, voidedBy: string, voidedAt = new Date()): void {
+  public voidExpense(
+    reason: string,
+    voidedBy: string,
+    expectedVersion?: number,
+    voidedAt = new Date(),
+  ): void {
     if (this._status === ExpenseStatus.VOIDED) {
       throw new ExpenseAlreadyVoidedError(this.id);
+    }
+    if (expectedVersion !== undefined && expectedVersion !== this._version) {
+      throw new ConcurrencyConflictError(
+        `Expense version conflict. Expected version ${expectedVersion}, current version ${this._version}`,
+      );
     }
     const cleanReason = reason.trim();
     if (!cleanReason) {
@@ -310,10 +330,21 @@ export class Expense {
   public attachReceipt(
     receipt: ExpenseReceiptInfo,
     updatedBy: string,
+    expectedVersion?: number,
     updatedAt = new Date(),
   ): void {
+    if (this._status === ExpenseStatus.POSTED) {
+      throw new EvidenceImmutableError(
+        'Cannot attach receipt to a POSTED expense. Receipts can only be attached while in DRAFT status.',
+      );
+    }
     if (this._status === ExpenseStatus.VOIDED) {
       throw new ExpenseAlreadyVoidedError(this.id);
+    }
+    if (expectedVersion !== undefined && expectedVersion !== this._version) {
+      throw new ConcurrencyConflictError(
+        `Expense version conflict. Expected version ${expectedVersion}, current version ${this._version}`,
+      );
     }
     this._receipt = receipt;
     this._updatedAt = updatedAt;
@@ -321,9 +352,19 @@ export class Expense {
     this._version += 1;
   }
 
-  public detachReceipt(updatedBy: string, updatedAt = new Date()): void {
+  public detachReceipt(updatedBy: string, expectedVersion?: number, updatedAt = new Date()): void {
+    if (this._status === ExpenseStatus.POSTED) {
+      throw new EvidenceImmutableError(
+        'Cannot detach receipt from a POSTED expense. Receipts can only be modified while in DRAFT status.',
+      );
+    }
     if (this._status === ExpenseStatus.VOIDED) {
       throw new ExpenseAlreadyVoidedError(this.id);
+    }
+    if (expectedVersion !== undefined && expectedVersion !== this._version) {
+      throw new ConcurrencyConflictError(
+        `Expense version conflict. Expected version ${expectedVersion}, current version ${this._version}`,
+      );
     }
     this._receipt = null;
     this._updatedAt = updatedAt;

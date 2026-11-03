@@ -10,6 +10,7 @@ import {
   vehicleApi,
   type CurrentUserResponse,
 } from '../lib/api-client';
+import { NotificationBell } from './notification-bell';
 
 export const DEV_ADMIN_TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzaWQiOiJsb2NhbC0yMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJzdWIiOiIyMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpc3MiOiJ2ZWhpY2xlLW1hbmFnZW1lbnQtbG9jYWwiLCJhdWQiOiJ2ZWhpY2xlLW1hbmFnZW1lbnQtYXBpIiwiaWF0IjoxNzkwMTQ3NjA5LCJleHAiOjE4MjE2ODM2MDl9.tHEKxYCMGub44l1Wi47dGZCZw4wCNUfKhyxXHz95z-c';
@@ -157,9 +158,27 @@ export function TenantHeader({ onAuthChange }: { onAuthChange?: () => void }) {
         >
           Expenses
         </Link>
+        <Link
+          href="/incidents"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-incidents"
+        >
+          Incidents
+        </Link>
+        <Link
+          href="/notifications"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-notifications"
+        >
+          Notifications
+        </Link>
       </nav>
 
-      <div className="auth-actions">
+      <div
+        className="auth-actions"
+        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}
+      >
+        <NotificationBell />
         <button
           type="button"
           className={`auth-btn ${activeRole === 'admin' ? 'active' : ''}`}

@@ -1,4 +1,9 @@
-import { roundTo2Decimals, roundTo3Decimals } from './money.js';
+import {
+  roundMoneyToCurrency,
+  roundTo2Decimals,
+  roundTo3Decimals,
+  roundTo4Decimals,
+} from './money.js';
 
 export interface FuelIntervalMetric {
   fuelTransactionId: string;
@@ -40,10 +45,14 @@ export function computeIntervalMetrics(
     status: string;
   }>,
 ): FuelIntervalMetric[] {
-  // Sort chronologically ascending
+  // Sort chronologically ascending with deterministic tie-breaker
   const activeTx = transactions
     .filter((t) => t.status !== 'VOIDED')
-    .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+    .sort((a, b) => {
+      const diff = a.occurredAt.getTime() - b.occurredAt.getTime();
+      if (diff !== 0) return diff;
+      return a.id.localeCompare(b.id);
+    });
 
   const results: FuelIntervalMetric[] = [];
   let prevOdo: number | null = null;
@@ -60,10 +69,10 @@ export function computeIntervalMetrics(
       if (diff > 0) {
         distanceKm = diff;
         if (tx.quantity > 0) {
-          kmPerUnit = roundTo2Decimals(diff / tx.quantity);
-          unitsPer100Km = roundTo2Decimals((tx.quantity / diff) * 100);
+          kmPerUnit = roundTo2Decimals(diff / tx.quantity).toNumber();
+          unitsPer100Km = roundTo2Decimals((tx.quantity / diff) * 100).toNumber();
         }
-        costPerKm = roundTo4Decimals(tx.totalAmount / diff);
+        costPerKm = roundTo4Decimals(tx.totalAmount / diff).toNumber();
       }
     }
 
@@ -120,10 +129,11 @@ export function computeVehicleEfficiency(
   }
 
   const currencySpend = Array.from(currencyTotals.entries()).map(([currencyCode, totalAmount]) => {
-    const avgCost = totalDistanceKm > 0 ? roundTo4Decimals(totalAmount / totalDistanceKm) : null;
+    const avgCost =
+      totalDistanceKm > 0 ? roundTo4Decimals(totalAmount / totalDistanceKm).toNumber() : null;
     return {
       currencyCode,
-      totalAmount: roundTo2Decimals(totalAmount),
+      totalAmount: roundMoneyToCurrency(totalAmount, currencyCode).toNumber(),
       averageCostPerKm: avgCost,
     };
   });
@@ -131,21 +141,17 @@ export function computeVehicleEfficiency(
   let averageKmPerUnit: number | null = null;
   let averageUnitsPer100Km: number | null = null;
   if (totalDistanceKm > 0 && totalQuantity > 0) {
-    averageKmPerUnit = roundTo2Decimals(totalDistanceKm / totalQuantity);
-    averageUnitsPer100Km = roundTo2Decimals((totalQuantity / totalDistanceKm) * 100);
+    averageKmPerUnit = roundTo2Decimals(totalDistanceKm / totalQuantity).toNumber();
+    averageUnitsPer100Km = roundTo2Decimals((totalQuantity / totalDistanceKm) * 100).toNumber();
   }
 
   return {
     vehicleId,
     totalTransactions: intervals.length,
-    totalQuantity: roundTo3Decimals(totalQuantity),
+    totalQuantity: roundTo3Decimals(totalQuantity).toNumber(),
     totalDistanceKm,
     averageKmPerUnit,
     averageUnitsPer100Km,
     currencySpend,
   };
-}
-
-function roundTo4Decimals(value: number): number {
-  return Math.round((value + Number.EPSILON) * 10000) / 10000;
 }

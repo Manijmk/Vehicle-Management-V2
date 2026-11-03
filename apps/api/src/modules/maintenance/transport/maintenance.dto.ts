@@ -43,17 +43,22 @@ export class CreateMaintenanceRequestDto {
 
   @ApiPropertyOptional({
     description: 'Request origin source',
-    enum: ['MANUAL', 'INSPECTION', 'PREVENTIVE'],
+    enum: ['MANUAL', 'INSPECTION', 'PREVENTIVE', 'INCIDENT'],
     default: 'MANUAL',
   })
   @IsOptional()
-  @IsIn(['MANUAL', 'INSPECTION', 'PREVENTIVE'])
+  @IsIn(['MANUAL', 'INSPECTION', 'PREVENTIVE', 'INCIDENT'])
   sourceType?: MaintenanceRequestSource;
 
   @ApiPropertyOptional({ description: 'Origin inspection ID if derived from DVIR' })
   @IsOptional()
   @IsUUID('4')
   sourceInspectionId?: string;
+
+  @ApiPropertyOptional({ description: 'Origin incident ID if derived from incident' })
+  @IsOptional()
+  @IsUUID('4')
+  sourceIncidentId?: string;
 
   @ApiProperty({ description: 'Brief summary title', example: 'Front brake grinding' })
   @IsString()
@@ -195,10 +200,10 @@ export class ListMaintenanceRequestsQueryDto {
 
   @ApiPropertyOptional({
     description: 'Filter by source type',
-    enum: ['MANUAL', 'INSPECTION', 'PREVENTIVE'],
+    enum: ['MANUAL', 'INSPECTION', 'PREVENTIVE', 'INCIDENT'],
   })
   @IsOptional()
-  @IsIn(['MANUAL', 'INSPECTION', 'PREVENTIVE'])
+  @IsIn(['MANUAL', 'INSPECTION', 'PREVENTIVE', 'INCIDENT'])
   sourceType?: MaintenanceRequestSource;
 
   @ApiPropertyOptional({ description: 'Search title or display ID' })

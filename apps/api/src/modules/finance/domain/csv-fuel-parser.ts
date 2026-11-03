@@ -1,5 +1,26 @@
 import { FuelQuantityUnit, FuelType } from '@vms/database';
-import { roundTo2Decimals, roundTo3Decimals, roundTo4Decimals } from './money.js';
+import {
+  calculateFuelTotalAmount,
+  isSupportedCurrency,
+  roundMoneyToCurrency,
+  roundTo3Decimals,
+  roundTo4Decimals,
+} from './money.js';
+
+export const MAX_CSV_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+export const MAX_CSV_ROWS = 5000;
+export const MAX_CSV_COLUMNS = 20;
+export const MAX_CELL_LENGTH = 255;
+
+export function sanitizeCsvField(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^[=+\-@]/.test(trimmed)) {
+    return `'${trimmed}`;
+  }
+  return trimmed;
+}
 
 export interface CsvFuelRow {
   rowNumber: number;
@@ -67,6 +88,17 @@ export function parseCsvLines(csvContent: string): string[][] {
 }
 
 export function parseFuelCsv(csvContent: string): CsvParseResult {
+  if (
+    typeof csvContent === 'string' &&
+    Buffer.byteLength(csvContent, 'utf8') > MAX_CSV_SIZE_BYTES
+  ) {
+    return {
+      totalRows: 0,
+      validRows: [],
+      errors: [{ row: 1, message: 'CSV file size exceeds maximum 5MB limit' }],
+    };
+  }
+
   const rows = parseCsvLines(csvContent);
   const firstRow = rows[0];
   if (!firstRow || rows.length === 0) {
@@ -74,6 +106,14 @@ export function parseFuelCsv(csvContent: string): CsvParseResult {
       totalRows: 0,
       validRows: [],
       errors: [{ row: 1, message: 'CSV file is empty' }],
+    };
+  }
+
+  if (rows.length - 1 > MAX_CSV_ROWS) {
+    return {
+      totalRows: rows.length - 1,
+      validRows: [],
+      errors: [{ row: 1, message: `CSV exceeds maximum limit of ${MAX_CSV_ROWS} rows` }],
     };
   }
 
@@ -150,6 +190,22 @@ export function parseFuelCsv(csvContent: string): CsvParseResult {
     const row = rows[i];
     if (!row) continue;
     const rowNum = i + 1; // 1-based index (header is 1)
+
+    if (row.length > MAX_CSV_COLUMNS) {
+      errors.push({
+        row: rowNum,
+        message: `Row exceeds maximum column limit of ${MAX_CSV_COLUMNS}`,
+      });
+      continue;
+    }
+
+    if (row.some((cell) => cell && cell.length > MAX_CELL_LENGTH)) {
+      errors.push({
+        row: rowNum,
+        message: `Cell length exceeds maximum ${MAX_CELL_LENGTH} characters`,
+      });
+      continue;
+    }
 
     // Check date
     const rawDate = row[dateIdx] ?? '';
@@ -229,23 +285,39 @@ export function parseFuelCsv(csvContent: string): CsvParseResult {
 
     // Check currency
     const curr = (row[currIdx] ?? '').trim().toUpperCase();
-    if (!curr || !/^[A-Z]{3}$/.test(curr)) {
+    if (!curr || !/^[A-Z]{3}$/.test(curr) || !isSupportedCurrency(curr)) {
       errors.push({
         row: rowNum,
         column: 'currency',
-        message: `Currency must be a 3-letter code: '${row[currIdx] ?? ''}'`,
+        message: `Unsupported or invalid ISO 4217 currency code: '${row[currIdx] ?? ''}'`,
       });
       continue;
     }
 
     // Total amount
-    let totalAmount = roundTo2Decimals(qty * unitPrice);
+    const calcTotal = calculateFuelTotalAmount(qty, unitPrice, curr);
+    let totalAmount = calcTotal;
     const rawTotal = totalIdx >= 0 ? row[totalIdx] : undefined;
     if (rawTotal) {
       const parsedTotal = parseFloat(rawTotal);
-      if (!isNaN(parsedTotal) && parsedTotal >= 0) {
-        totalAmount = roundTo2Decimals(parsedTotal);
+      if (isNaN(parsedTotal) || parsedTotal < 0) {
+        errors.push({
+          row: rowNum,
+          column: 'total_amount',
+          message: `Total amount must be non-negative: '${rawTotal}'`,
+        });
+        continue;
       }
+      const roundedProvidedTotal = roundMoneyToCurrency(parsedTotal, curr);
+      if (!roundedProvidedTotal.equals(calcTotal)) {
+        errors.push({
+          row: rowNum,
+          column: 'total_amount',
+          message: `Provided total amount ${roundedProvidedTotal.toFixed()} does not match calculated total ${calcTotal.toFixed()} for currency ${curr}`,
+        });
+        continue;
+      }
+      totalAmount = roundedProvidedTotal;
     }
 
     // Odometer
@@ -265,26 +337,23 @@ export function parseFuelCsv(csvContent: string): CsvParseResult {
     }
 
     // Station
-    const rawStation = stationIdx >= 0 ? row[stationIdx] : undefined;
-    const stationName = rawStation && rawStation.trim().length > 0 ? rawStation.trim() : null;
+    const stationName = sanitizeCsvField(stationIdx >= 0 ? row[stationIdx] : undefined);
 
     // Reference number
-    const rawRef = refIdx >= 0 ? row[refIdx] : undefined;
-    const referenceNumber = rawRef && rawRef.trim().length > 0 ? rawRef.trim() : null;
+    const referenceNumber = sanitizeCsvField(refIdx >= 0 ? row[refIdx] : undefined);
 
     // Driver number
-    const rawDriver = driverIdx >= 0 ? row[driverIdx] : undefined;
-    const driverNumber = rawDriver && rawDriver.trim().length > 0 ? rawDriver.trim() : null;
+    const driverNumber = sanitizeCsvField(driverIdx >= 0 ? row[driverIdx] : undefined);
 
     validRows.push({
       rowNumber: rowNum,
       date: parsedDate,
       registration: reg,
       energyType,
-      quantity: roundTo3Decimals(qty),
+      quantity: roundTo3Decimals(qty).toNumber(),
       unit,
-      unitPrice: roundTo4Decimals(unitPrice),
-      totalAmount,
+      unitPrice: roundTo4Decimals(unitPrice).toNumber(),
+      totalAmount: totalAmount.toNumber(),
       currency: curr,
       odometerKm,
       stationName,

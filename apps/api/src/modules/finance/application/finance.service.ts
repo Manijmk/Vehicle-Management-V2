@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   ExpenseCategoryStatus,
   ExpenseStatus,
@@ -8,6 +8,7 @@ import {
   type FuelType,
 } from '@vms/database';
 import { ApplicationError } from '../../foundation/domain/errors.js';
+import { validateUploadedDocumentFile } from '../../compliance/application/file-validation.js';
 import type { ObjectStoragePort } from '../../compliance/application/object-storage.port.js';
 import { OBJECT_STORAGE_PORT } from '../../compliance/compliance.tokens.js';
 import { parseFuelCsv } from '../domain/csv-fuel-parser.js';
@@ -20,6 +21,9 @@ import {
   ExpenseNotFoundError,
   FuelTransactionNotFoundError,
   ReceiptStorageError,
+  TripDriverMismatchError,
+  TripVehicleMismatchError,
+  WorkOrderVehicleMismatchError,
 } from '../domain/finance-errors.js';
 import { detectFuelAnomalies } from '../domain/fuel-anomaly-detector.js';
 import { FuelTransaction } from '../domain/fuel-transaction.js';
@@ -52,10 +56,12 @@ export interface CreateFuelTransactionInput {
   stationName?: string | undefined;
   referenceNumber?: string | undefined;
   source?: FuelTransactionSource | undefined;
+  importBatchId?: string | undefined;
 }
 
 export interface VoidFuelTransactionInput {
   reason: string;
+  version?: number | undefined;
 }
 
 export interface CreateExpenseInput {
@@ -87,8 +93,13 @@ export interface UpdateExpenseDraftInput {
   referenceNumber?: string | null | undefined;
 }
 
+export interface PostExpenseInput {
+  version?: number | undefined;
+}
+
 export interface VoidExpenseInput {
   reason: string;
+  version?: number | undefined;
 }
 
 export interface CreateExpenseCategoryInput {
@@ -148,6 +159,12 @@ export class FinanceService {
           `Trip '${input.tripId}' was not found in this organization`,
         );
       }
+      if (input.vehicleId && input.vehicleId !== trip.vehicleId) {
+        throw new TripVehicleMismatchError(trip.vehicleId, input.vehicleId);
+      }
+      if (input.driverId && input.driverId !== trip.driverId) {
+        throw new TripDriverMismatchError(trip.driverId ?? 'none', input.driverId);
+      }
       effectiveVehicleId = trip.vehicleId;
       effectiveDriverId = trip.driverId;
     }
@@ -198,6 +215,7 @@ export class FinanceService {
       stationName: input.stationName ?? null,
       referenceNumber: input.referenceNumber ?? null,
       source: input.source ?? FuelTransactionSource.MANUAL,
+      importBatchId: input.importBatchId ?? null,
       createdById: metadata.actorId,
     });
 
@@ -207,6 +225,8 @@ export class FinanceService {
       effectiveVehicleId,
       input.referenceNumber ?? null,
       input.energyType,
+      input.currencyCode,
+      input.quantityUnit ?? FuelQuantityUnit.LITER,
       input.occurredAt,
     );
 
@@ -259,7 +279,7 @@ export class FinanceService {
       throw new FuelTransactionNotFoundError(id);
     }
 
-    entity.voidTransaction(input.reason, metadata.actorId);
+    entity.voidTransaction(input.reason, metadata.actorId, input.version);
 
     return this.repository.saveFuelTransaction(entity, [], metadata, 'FuelTransactionVoided');
   }
@@ -275,17 +295,19 @@ export class FinanceService {
       throw new FuelTransactionNotFoundError(id);
     }
 
-    this.validateReceiptFile(file);
+    const { detectedMimeType, sizeBytes } = validateUploadedDocumentFile(
+      file.buffer,
+      file.mimetype || 'application/octet-stream',
+    );
 
     const ext = file.originalname.includes('.') ? file.originalname.split('.').pop() : 'bin';
     const objectKey = `tenants/${organizationId}/finance/fuel/${id}/${randomUUID()}.${ext}`;
-    const contentType = file.mimetype || 'application/octet-stream';
 
     try {
       await this.objectStorage.putObject({
         objectKey,
         body: file.buffer,
-        contentType,
+        contentType: detectedMimeType,
       });
     } catch (err) {
       throw new ReceiptStorageError(`Failed to store fuel receipt file in S3: ${String(err)}`, err);
@@ -295,8 +317,8 @@ export class FinanceService {
       {
         storageKey: objectKey,
         fileName: file.originalname,
-        contentType,
-        sizeBytes: file.size || file.buffer.length,
+        contentType: detectedMimeType,
+        sizeBytes,
       },
       metadata.actorId,
     );
@@ -312,7 +334,14 @@ export class FinanceService {
   public async getFuelReceiptDownloadUrl(
     organizationId: string,
     id: string,
-  ): Promise<{ url: string; fileName: string; contentType: string }> {
+  ): Promise<{
+    url: string;
+    downloadUrl: string;
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+    expiresInSeconds: number;
+  }> {
     const detail = await this.repository.findFuelTransactionById(organizationId, id);
     if (!detail) {
       throw new FuelTransactionNotFoundError(id);
@@ -323,16 +352,26 @@ export class FinanceService {
         'This fuel transaction does not have an attached receipt',
       );
     }
+    if (!detail.receiptStorageKey.startsWith(`tenants/${organizationId}/`)) {
+      throw new ApplicationError(
+        'INVALID_TENANT_CONTEXT',
+        'Receipt storage key does not belong to tenant',
+      );
+    }
 
     const url = await this.objectStorage.getSignedDownloadUrl({
       objectKey: detail.receiptStorageKey,
       expiresInSeconds: 900, // 15 minutes
+      fileName: detail.receiptFileName || undefined,
     });
 
     return {
       url,
+      downloadUrl: url,
       fileName: detail.receiptFileName || 'receipt.pdf',
       contentType: detail.receiptContentType || 'application/pdf',
+      sizeBytes: 0,
+      expiresInSeconds: 900,
     };
   }
 
@@ -469,9 +508,39 @@ export class FinanceService {
     createdTransactions: FuelTransactionDetail[];
     errors: Array<{ row: number; error: string }>;
   }> {
+    const normalizedCsv = csvContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    const checksum = createHash('sha256').update(normalizedCsv, 'utf8').digest('hex');
+
+    const existingJob = await this.repository.findFuelImportJobByChecksum(organizationId, checksum);
+    if (existingJob && existingJob.status === 'COMPLETED') {
+      const existingTx = await this.repository.listFuelTransactionsByBatchId(
+        organizationId,
+        existingJob.id,
+      );
+      return {
+        importedCount: existingJob.importedRows,
+        failedCount: existingJob.failedRows,
+        createdTransactions: existingTx,
+        errors: [],
+      };
+    }
+
+    const importJobId = randomUUID();
     const preview = await this.importFuelCsvPreview(organizationId, csvContent);
     const createdTransactions: FuelTransactionDetail[] = [];
     const errors: Array<{ row: number; error: string }> = [];
+
+    await this.repository.createFuelImportJob({
+      id: importJobId,
+      organizationId,
+      fileName: 'import.csv',
+      totalRows: preview.rows.length,
+      importedRows: 0,
+      failedRows: 0,
+      status: 'PROCESSING',
+      idempotencyChecksum: checksum,
+      createdById: metadata.actorId,
+    });
 
     for (const row of preview.rows) {
       if (row.errors.length > 0) {
@@ -496,6 +565,7 @@ export class FinanceService {
             stationName: row.stationName ?? undefined,
             referenceNumber: row.referenceNumber ?? undefined,
             source: FuelTransactionSource.CSV_IMPORT,
+            importBatchId: importJobId,
           },
           metadata,
         );
@@ -507,6 +577,14 @@ export class FinanceService {
         });
       }
     }
+
+    await this.repository.updateFuelImportJob(importJobId, {
+      importedRows: createdTransactions.length,
+      failedRows: errors.length,
+      status:
+        errors.length === preview.rows.length && preview.rows.length > 0 ? 'FAILED' : 'COMPLETED',
+      errorSummary: errors.length > 0 ? `${errors.length} rows failed during import` : null,
+    });
 
     return {
       importedCount: createdTransactions.length,
@@ -548,6 +626,12 @@ export class FinanceService {
           `Trip '${input.tripId}' was not found in this organization`,
         );
       }
+      if (input.vehicleId && input.vehicleId !== trip.vehicleId) {
+        throw new TripVehicleMismatchError(trip.vehicleId, input.vehicleId);
+      }
+      if (input.driverId && input.driverId !== trip.driverId) {
+        throw new TripDriverMismatchError(trip.driverId ?? 'none', input.driverId);
+      }
       effectiveVehicleId = trip.vehicleId;
       effectiveDriverId = trip.driverId;
     }
@@ -563,6 +647,9 @@ export class FinanceService {
           'WORK_ORDER_NOT_FOUND',
           `Maintenance work order '${input.maintenanceWorkOrderId}' was not found in this organization`,
         );
+      }
+      if (input.vehicleId && input.vehicleId !== wo.vehicleId) {
+        throw new WorkOrderVehicleMismatchError(wo.vehicleId, input.vehicleId);
       }
       if (!effectiveVehicleId) {
         effectiveVehicleId = wo.vehicleId;
@@ -655,8 +742,8 @@ export class FinanceService {
       }
     }
 
-    let effectiveVehicleId = input.vehicleId;
-    let effectiveDriverId = input.driverId;
+    let effectiveVehicleId = input.vehicleId !== undefined ? input.vehicleId : entity.vehicleId;
+    let effectiveDriverId = input.driverId !== undefined ? input.driverId : entity.driverId;
 
     if (input.tripId) {
       const trip = await this.repository.findTripById(organizationId, input.tripId);
@@ -666,8 +753,33 @@ export class FinanceService {
           `Trip '${input.tripId}' was not found in this organization`,
         );
       }
+      if (effectiveVehicleId && effectiveVehicleId !== trip.vehicleId) {
+        throw new TripVehicleMismatchError(trip.vehicleId, effectiveVehicleId);
+      }
+      if (effectiveDriverId && effectiveDriverId !== trip.driverId) {
+        throw new TripDriverMismatchError(trip.driverId ?? 'none', effectiveDriverId);
+      }
       effectiveVehicleId = trip.vehicleId;
       effectiveDriverId = trip.driverId;
+    }
+
+    if (input.maintenanceWorkOrderId) {
+      const wo = await this.repository.findWorkOrderById(
+        organizationId,
+        input.maintenanceWorkOrderId,
+      );
+      if (!wo) {
+        throw new ApplicationError(
+          'WORK_ORDER_NOT_FOUND',
+          `Maintenance work order '${input.maintenanceWorkOrderId}' was not found in this organization`,
+        );
+      }
+      if (effectiveVehicleId && effectiveVehicleId !== wo.vehicleId) {
+        throw new WorkOrderVehicleMismatchError(wo.vehicleId, effectiveVehicleId);
+      }
+      if (!effectiveVehicleId) {
+        effectiveVehicleId = wo.vehicleId;
+      }
     }
 
     entity.updateDraft({
@@ -683,14 +795,17 @@ export class FinanceService {
   public async postExpense(
     organizationId: string,
     id: string,
-    metadata: FinanceMutationMetadata,
+    inputOrMetadata?: PostExpenseInput | FinanceMutationMetadata,
+    maybeMetadata?: FinanceMutationMetadata,
   ): Promise<ExpenseDetail> {
+    const input = (maybeMetadata ? inputOrMetadata : undefined) as PostExpenseInput | undefined;
+    const metadata = (maybeMetadata ?? inputOrMetadata) as FinanceMutationMetadata;
     const entity = await this.repository.findExpenseEntityById(organizationId, id);
     if (!entity) {
       throw new ExpenseNotFoundError(id);
     }
 
-    entity.post(metadata.actorId);
+    entity.post(metadata.actorId, input?.version);
 
     return this.repository.saveExpense(entity, metadata, 'ExpensePosted');
   }
@@ -706,7 +821,7 @@ export class FinanceService {
       throw new ExpenseNotFoundError(id);
     }
 
-    entity.voidExpense(input.reason, metadata.actorId);
+    entity.voidExpense(input.reason, metadata.actorId, input.version);
 
     return this.repository.saveExpense(entity, metadata, 'ExpenseVoided');
   }
@@ -722,17 +837,19 @@ export class FinanceService {
       throw new ExpenseNotFoundError(id);
     }
 
-    this.validateReceiptFile(file);
+    const { detectedMimeType, sizeBytes } = validateUploadedDocumentFile(
+      file.buffer,
+      file.mimetype || 'application/octet-stream',
+    );
 
     const ext = file.originalname.includes('.') ? file.originalname.split('.').pop() : 'bin';
     const objectKey = `tenants/${organizationId}/finance/expenses/${id}/${randomUUID()}.${ext}`;
-    const contentType = file.mimetype || 'application/octet-stream';
 
     try {
       await this.objectStorage.putObject({
         objectKey,
         body: file.buffer,
-        contentType,
+        contentType: detectedMimeType,
       });
     } catch (err) {
       throw new ReceiptStorageError(`Failed to store expense receipt in S3: ${String(err)}`, err);
@@ -742,8 +859,8 @@ export class FinanceService {
       {
         storageKey: objectKey,
         fileName: file.originalname,
-        contentType,
-        sizeBytes: file.size || file.buffer.length,
+        contentType: detectedMimeType,
+        sizeBytes,
       },
       metadata.actorId,
     );
@@ -754,7 +871,14 @@ export class FinanceService {
   public async getExpenseReceiptDownloadUrl(
     organizationId: string,
     id: string,
-  ): Promise<{ url: string; fileName: string; contentType: string }> {
+  ): Promise<{
+    url: string;
+    downloadUrl: string;
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+    expiresInSeconds: number;
+  }> {
     const detail = await this.repository.findExpenseById(organizationId, id);
     if (!detail) {
       throw new ExpenseNotFoundError(id);
@@ -765,16 +889,26 @@ export class FinanceService {
         'This expense does not have an attached receipt',
       );
     }
+    if (!detail.receiptStorageKey.startsWith(`tenants/${organizationId}/`)) {
+      throw new ApplicationError(
+        'INVALID_TENANT_CONTEXT',
+        'Receipt storage key does not belong to tenant',
+      );
+    }
 
     const url = await this.objectStorage.getSignedDownloadUrl({
       objectKey: detail.receiptStorageKey,
       expiresInSeconds: 900,
+      fileName: detail.receiptFileName || undefined,
     });
 
     return {
       url,
+      downloadUrl: url,
       fileName: detail.receiptFileName || 'receipt.pdf',
       contentType: detail.receiptContentType || 'application/pdf',
+      sizeBytes: 0,
+      expiresInSeconds: 900,
     };
   }
 

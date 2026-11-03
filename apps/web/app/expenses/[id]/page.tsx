@@ -6,6 +6,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { TenantHeader } from '../../../components/tenant-header';
 import {
   financeApi,
+  vehicleApi,
+  type CurrentUserResponse,
   type ExpenseCategoryRecord,
   type ExpenseRecord,
 } from '../../../lib/api-client';
@@ -14,6 +16,7 @@ export default function ExpenseDetailPage() {
   const params = useParams();
   const expenseId = params['id'] as string;
 
+  const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [expense, setExpense] = useState<ExpenseRecord | null>(null);
   const [categories, setCategories] = useState<ExpenseCategoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,12 +43,14 @@ export default function ExpenseDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const [exp, cats] = await Promise.all([
+      const [exp, cats, user] = await Promise.all([
         financeApi.fetchExpense(expenseId),
         financeApi.fetchExpenseCategories(true),
+        vehicleApi.fetchCurrentUser().catch(() => null),
       ]);
       setExpense(exp);
       setCategories(cats);
+      setCurrentUser(user);
       setEditDescription(exp.description);
       setEditAmount(exp.amount);
       setEditCategoryId(exp.categoryId);
@@ -59,6 +64,9 @@ export default function ExpenseDetailPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  const canManage = Boolean(currentUser?.permissions.includes('expense.manage'));
+  const canDownloadReceipt = Boolean(currentUser?.permissions.includes('finance.receipt.download'));
 
   const handleSaveDraft = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,7 +128,14 @@ export default function ExpenseDetailPage() {
   const handleDownloadReceipt = async () => {
     try {
       const res = await financeApi.getExpenseReceiptUrl(expenseId);
-      window.open(res.downloadUrl, '_blank', 'noopener,noreferrer');
+      const downloadUrl = res.downloadUrl || (res as unknown as { url?: string }).url;
+      if (!downloadUrl) throw new Error('Download URL not returned');
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = res.fileName || expense?.receiptFileName || 'receipt.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to get receipt download URL');
     }
@@ -238,7 +253,7 @@ export default function ExpenseDetailPage() {
             </div>
 
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-              {expense.status === 'DRAFT' && !isEditing && (
+              {expense.status === 'DRAFT' && !isEditing && canManage && (
                 <>
                   <button
                     type="button"
@@ -274,7 +289,7 @@ export default function ExpenseDetailPage() {
                 </>
               )}
 
-              {expense.status === 'POSTED' && (
+              {expense.status === 'POSTED' && canManage && (
                 <button
                   type="button"
                   onClick={() => setShowVoidModal(true)}
@@ -615,39 +630,44 @@ export default function ExpenseDetailPage() {
                 }}
               >
                 <div>
-                  <p style={{ margin: 0, fontWeight: 500 }}>
+                  <p style={{ margin: 0, fontWeight: 500 }} data-testid="attached-receipt-name">
                     Attached file: {expense.receiptFileName || 'receipt.pdf'}
                   </p>
-                  <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.75rem' }}>
+                  <p
+                    style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.75rem' }}
+                    data-testid="attached-receipt-meta"
+                  >
                     {expense.receiptContentType} &bull;{' '}
                     {expense.receiptFileSize
                       ? `${(expense.receiptFileSize / 1024).toFixed(1)} KB`
                       : ''}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleDownloadReceipt}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: '#2563eb',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                  }}
-                  data-testid="btn-download-receipt"
-                >
-                  Download Signed Receipt &darr;
-                </button>
+                {canDownloadReceipt && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadReceipt}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: '#2563eb',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                    data-testid="btn-download-receipt"
+                  >
+                    Download Signed Receipt &darr;
+                  </button>
+                )}
               </div>
             ) : (
               <div>
                 <p style={{ color: '#6b7280', margin: '0 0 1rem 0', fontSize: '0.875rem' }}>
                   No receipt attached to this expense.
                 </p>
-                {expense.status !== 'VOIDED' && (
+                {expense.status === 'DRAFT' && canManage && (
                   <form
                     onSubmit={handleUploadReceipt}
                     style={{

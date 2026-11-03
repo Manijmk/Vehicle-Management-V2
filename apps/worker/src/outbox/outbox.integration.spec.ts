@@ -466,4 +466,170 @@ describe('persisted outbox publication', () => {
     await database.inspectionTemplate.deleteMany({ where: { id: templateId } });
     await database.vehicle.deleteMany({ where: { id: vehicleId } });
   });
+
+  it('claims and publishes finance lifecycle events (FuelTransactionCreated, ExpensePosted, ExpenseVoided)', async () => {
+    const financeEvents = [
+      {
+        id: '72000000-0000-4000-8000-000000000081',
+        organizationId,
+        eventType: 'FuelTransactionCreated',
+        aggregateType: 'FuelTransaction',
+        aggregateId: '92000000-0000-4000-8000-000000000001',
+        payload: {
+          fuelTransactionId: '92000000-0000-4000-8000-000000000001',
+          vehicleId: '52000000-0000-4000-8000-000000000001',
+          amount: 65.98,
+          currency: 'USD',
+        },
+        occurredAt: new Date(),
+      },
+      {
+        id: '72000000-0000-4000-8000-000000000082',
+        eventType: 'ExpensePosted',
+        organizationId,
+        aggregateType: 'Expense',
+        aggregateId: '92000000-0000-4000-8000-000000000002',
+        payload: {
+          expenseId: '92000000-0000-4000-8000-000000000002',
+          amount: 150.0,
+          currency: 'USD',
+        },
+        occurredAt: new Date(),
+      },
+      {
+        id: '72000000-0000-4000-8000-000000000083',
+        organizationId,
+        eventType: 'ExpenseVoided',
+        aggregateType: 'Expense',
+        aggregateId: '92000000-0000-4000-8000-000000000002',
+        payload: {
+          expenseId: '92000000-0000-4000-8000-000000000002',
+          voidReason: 'Duplicate entry',
+        },
+        occurredAt: new Date(),
+      },
+    ];
+
+    for (const ev of financeEvents) {
+      await database.outboxEvent.create({ data: ev });
+    }
+
+    const store = new PrismaOutboxStore(database);
+    const publishedIds: string[] = [];
+    const publisher = {
+      publish: vi.fn().mockImplementation(async (event) => {
+        publishedIds.push(event.id);
+      }),
+    } as unknown as IntegrationEventPublisher;
+
+    const processor = new OutboxProcessorService(store, publisher, config);
+    const processedCount = await processor.processBatch();
+
+    expect(processedCount).toBeGreaterThanOrEqual(3);
+    expect(publishedIds).toContain('72000000-0000-4000-8000-000000000081');
+    expect(publishedIds).toContain('72000000-0000-4000-8000-000000000082');
+    expect(publishedIds).toContain('72000000-0000-4000-8000-000000000083');
+
+    for (const ev of financeEvents) {
+      const persisted = await database.outboxEvent.findUnique({ where: { id: ev.id } });
+      expect(persisted?.status).toBe('PUBLISHED');
+      expect(persisted?.attempts).toBe(1);
+    }
+  });
+
+  it('claims and publishes incident lifecycle events (IncidentReported, IncidentInvestigationStarted, IncidentResolved, IncidentClosed, IncidentCancelled)', async () => {
+    const incidentEvents = [
+      {
+        id: '72000000-0000-4000-8000-000000000091',
+        organizationId,
+        eventType: 'IncidentReported',
+        aggregateType: 'Incident',
+        aggregateId: 'a2000000-0000-4000-8000-000000000001',
+        payload: {
+          incidentId: 'a2000000-0000-4000-8000-000000000001',
+          displayId: 'INC-1001',
+          type: 'COLLISION',
+          severity: 'MAJOR',
+          operationalImpact: 'VEHICLE',
+        },
+        occurredAt: new Date(),
+      },
+      {
+        id: '72000000-0000-4000-8000-000000000092',
+        organizationId,
+        eventType: 'IncidentInvestigationStarted',
+        aggregateType: 'Incident',
+        aggregateId: 'a2000000-0000-4000-8000-000000000001',
+        payload: {
+          incidentId: 'a2000000-0000-4000-8000-000000000001',
+          fromStatus: 'REPORTED',
+          toStatus: 'INVESTIGATING',
+        },
+        occurredAt: new Date(),
+      },
+      {
+        id: '72000000-0000-4000-8000-000000000093',
+        organizationId,
+        eventType: 'IncidentResolved',
+        aggregateType: 'Incident',
+        aggregateId: 'a2000000-0000-4000-8000-000000000001',
+        payload: {
+          incidentId: 'a2000000-0000-4000-8000-000000000001',
+          resolutionSummary: 'Damage assessed and repaired',
+        },
+        occurredAt: new Date(),
+      },
+      {
+        id: '72000000-0000-4000-8000-000000000094',
+        organizationId,
+        eventType: 'IncidentClosed',
+        aggregateType: 'Incident',
+        aggregateId: 'a2000000-0000-4000-8000-000000000001',
+        payload: {
+          incidentId: 'a2000000-0000-4000-8000-000000000001',
+        },
+        occurredAt: new Date(),
+      },
+      {
+        id: '72000000-0000-4000-8000-000000000095',
+        organizationId,
+        eventType: 'IncidentCancelled',
+        aggregateType: 'Incident',
+        aggregateId: 'a2000000-0000-4000-8000-000000000002',
+        payload: {
+          incidentId: 'a2000000-0000-4000-8000-000000000002',
+          cancellationReason: 'Logged in error',
+        },
+        occurredAt: new Date(),
+      },
+    ];
+
+    for (const ev of incidentEvents) {
+      await database.outboxEvent.create({ data: ev });
+    }
+
+    const store = new PrismaOutboxStore(database);
+    const publishedIds: string[] = [];
+    const publisher = {
+      publish: vi.fn().mockImplementation(async (event) => {
+        publishedIds.push(event.id);
+      }),
+    } as unknown as IntegrationEventPublisher;
+
+    const processor = new OutboxProcessorService(store, publisher, config);
+    const processedCount = await processor.processBatch();
+
+    expect(processedCount).toBeGreaterThanOrEqual(5);
+    expect(publishedIds).toContain('72000000-0000-4000-8000-000000000091');
+    expect(publishedIds).toContain('72000000-0000-4000-8000-000000000092');
+    expect(publishedIds).toContain('72000000-0000-4000-8000-000000000093');
+    expect(publishedIds).toContain('72000000-0000-4000-8000-000000000094');
+    expect(publishedIds).toContain('72000000-0000-4000-8000-000000000095');
+
+    for (const ev of incidentEvents) {
+      const persisted = await database.outboxEvent.findUnique({ where: { id: ev.id } });
+      expect(persisted?.status).toBe('PUBLISHED');
+      expect(persisted?.attempts).toBe(1);
+    }
+  });
 });

@@ -11,8 +11,10 @@ import { AssignmentModule } from './modules/assignment/assignment.module.js';
 import { ComplianceModule } from './modules/compliance/compliance.module.js';
 import { DriverModule } from './modules/driver/driver.module.js';
 import { FinanceModule } from './modules/finance/finance.module.js';
+import { IncidentModule } from './modules/incident/incident.module.js';
 import { InspectionModule } from './modules/inspection/inspection.module.js';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module.js';
+import { NotificationModule } from './modules/notification/notification.module.js';
 import { TripModule } from './modules/trip/trip.module.js';
 import { VehicleModule } from './modules/vehicle/vehicle.module.js';
 
@@ -28,6 +30,8 @@ import { VehicleModule } from './modules/vehicle/vehicle.module.js';
     MaintenanceModule,
     ComplianceModule,
     FinanceModule,
+    IncidentModule,
+    NotificationModule,
   ],
   controllers: [HealthController],
   providers: [

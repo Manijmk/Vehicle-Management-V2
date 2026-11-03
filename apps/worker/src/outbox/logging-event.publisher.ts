@@ -1,8 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { PrismaClient } from '@vms/database';
 
 import type { ClaimedOutboxEvent, IntegrationEventPublisher } from './outbox.types.js';
 import { WORKER_DATABASE } from './tokens.js';
+import type { NotificationRuleEvaluatorService } from '../notifications/notification-rule-evaluator.service.js';
 
 @Injectable()
 export class LoggingEventPublisher implements IntegrationEventPublisher {
@@ -11,6 +12,8 @@ export class LoggingEventPublisher implements IntegrationEventPublisher {
   constructor(
     @Inject(WORKER_DATABASE)
     private readonly database: PrismaClient,
+    @Optional()
+    private readonly notificationEvaluator?: NotificationRuleEvaluatorService,
   ) {}
 
   async publish(event: ClaimedOutboxEvent): Promise<void> {
@@ -25,6 +28,10 @@ export class LoggingEventPublisher implements IntegrationEventPublisher {
 
     if (event.eventType === 'InspectionCriticalFailureDetected') {
       await this.handleInspectionCriticalFailure(event);
+    }
+
+    if (this.notificationEvaluator) {
+      await this.notificationEvaluator.handleEvent(event);
     }
   }
 

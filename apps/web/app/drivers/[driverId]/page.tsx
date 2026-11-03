@@ -10,12 +10,14 @@ import {
   assignmentApi,
   complianceApi,
   driverApi,
+  incidentApi,
   tripApi,
   vehicleApi,
   type ComplianceDocumentTypeRecord,
   type CurrentUserResponse,
   type DriverRecord,
   type DriverStatusHistoryEntry,
+  type IncidentRecord,
   type InspectionRecord,
   type SubjectComplianceResponse,
   type TripRecord,
@@ -35,6 +37,7 @@ export default function DriverDetailPage() {
   const [currentTrip, setCurrentTrip] = useState<TripRecord | null>(null);
   const [tripHistory, setTripHistory] = useState<TripRecord[]>([]);
   const [inspections, setInspections] = useState<InspectionRecord[]>([]);
+  const [driverIncidents, setDriverIncidents] = useState<IncidentRecord[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +100,7 @@ export default function DriverDetailPage() {
       setConflictMessage(null);
       setActionErrorMessage(null);
 
-      const [d, h, u, curAsn, asnH, curTrip, tripH, inspRes, compRes, docTypesRes] =
+      const [d, h, u, curAsn, asnH, curTrip, tripH, inspRes, compRes, docTypesRes, incRes] =
         await Promise.all([
           driverApi.fetchDriver(driverId),
           driverApi.fetchStatusHistory(driverId).catch(() => []),
@@ -117,6 +120,7 @@ export default function DriverDetailPage() {
           complianceApi
             .fetchDocumentTypes({ subjectType: 'DRIVER', status: 'ACTIVE' })
             .catch(() => ({ items: [], total: 0 })),
+          incidentApi.fetchDriverIncidents(driverId, 20).catch(() => ({ items: [], total: 0 })),
         ]);
       setDriver(d);
       setHistory(h);
@@ -128,6 +132,7 @@ export default function DriverDetailPage() {
       setInspections(inspRes);
       setComplianceData(compRes);
       setDriverDocTypes(docTypesRes.items);
+      setDriverIncidents(incRes?.items ?? []);
       setEditData({
         firstName: d.firstName,
         lastName: d.lastName,
@@ -1891,6 +1896,88 @@ export default function DriverDetailPage() {
               ))}
             </tbody>
           </table>
+        )}
+      </section>
+
+      {/* Incidents Section */}
+      <section
+        className="panel"
+        data-testid="driver-incidents-section"
+        style={{ marginTop: '1.5rem' }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1rem',
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: '1.25rem' }}>
+            Incidents & Safety Events ({driverIncidents.length})
+          </h2>
+          <Link
+            href="/incidents/new"
+            style={{
+              padding: '0.4rem 0.8rem',
+              background: '#dc2626',
+              color: '#fff',
+              borderRadius: '6px',
+              textDecoration: 'none',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+            }}
+          >
+            + Report Incident
+          </Link>
+        </div>
+
+        {driverIncidents.length === 0 ? (
+          <p style={{ color: '#6b7280', margin: 0 }}>No incidents recorded for this driver.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+              <thead>
+                <tr
+                  style={{
+                    background: '#f9fafb',
+                    borderBottom: '1px solid #e5e7eb',
+                    textAlign: 'left',
+                  }}
+                >
+                  <th style={{ padding: '0.5rem 0.75rem' }}>ID</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Title</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Type</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Severity</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Status</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Impact</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Occurred</th>
+                </tr>
+              </thead>
+              <tbody>
+                {driverIncidents.map((inc) => (
+                  <tr key={inc.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600 }}>
+                      <Link
+                        href={`/incidents/${inc.id}`}
+                        style={{ color: '#2563eb', textDecoration: 'none' }}
+                      >
+                        {inc.displayId}
+                      </Link>
+                    </td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{inc.title}</td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{inc.type}</td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{inc.severity}</td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{inc.status}</td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{inc.operationalImpact}</td>
+                    <td style={{ padding: '0.5rem 0.75rem', color: '#6b7280' }}>
+                      {new Date(inc.occurredAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </main>

@@ -1,3 +1,6 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+
 import { expect, test } from '@playwright/test';
 
 test.describe('Milestone 9: Finance (Fuel & Expenses) Vertical Slice Acceptance Flow', () => {
@@ -74,6 +77,44 @@ test.describe('Milestone 9: Finance (Fuel & Expenses) Vertical Slice Acceptance 
     await expect(page.getByTestId('fuel-total-amount')).toContainText('100.00 USD');
     await expect(page.getByTestId('fuel-odometer')).toHaveText('20500 km');
 
+    // 4b. Receipt Flow: Upload fixture PDF, verify metadata, download content, immutability, and no raw storage key
+    await expect(page.getByTestId('receipt-section')).toBeVisible();
+    const fuelFixtureBuffer = Buffer.from(
+      '%PDF-1.4 sample fuel receipt content deterministic bytes 12345',
+    );
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'sample_fuel_receipt.pdf',
+      mimeType: 'application/pdf',
+      buffer: fuelFixtureBuffer,
+    });
+    await page.getByTestId('btn-upload-receipt').click();
+    await expect(page.getByTestId('attached-receipt-name')).toContainText(
+      'sample_fuel_receipt.pdf',
+    );
+    await expect(page.getByTestId('attached-receipt-meta')).toContainText('application/pdf');
+
+    // Real Browser Download: Trigger download, request presigned URL, verify downloaded bytes match fixture exactly
+    const [fuelDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('btn-download-receipt').click(),
+    ]);
+    const fuelDownloadPath = await fuelDownload.path();
+    expect(fuelDownloadPath).toBeTruthy();
+    const downloadedFuelBytes = fs.readFileSync(fuelDownloadPath!);
+    expect(downloadedFuelBytes).toEqual(fuelFixtureBuffer);
+    const fuelSha256 = crypto.createHash('sha256').update(downloadedFuelBytes).digest('hex');
+    const expectedFuelSha = crypto.createHash('sha256').update(fuelFixtureBuffer).digest('hex');
+    expect(fuelSha256).toBe(expectedFuelSha);
+
+    // Immutability: upload form is no longer rendered
+    await expect(page.getByTestId('upload-receipt-form')).not.toBeVisible();
+
+    // Verify raw MinIO key and raw bucket URL are not rendered in page HTML
+    const fuelPageHtml = await page.content();
+    expect(fuelPageHtml).not.toContain('receipts/');
+    expect(fuelPageHtml).not.toContain('vehicle-management/');
+    expect(fuelPageHtml).not.toContain('localhost:9000');
+
     // 5. Fuel Purchase #2: trigger ODOMETER_REGRESSION anomaly (logging 20300 km after 20500 km)
     await page.goto('/fuel/new');
     await page.getByTestId('input-vehicle').selectOption(vehicleId);
@@ -138,6 +179,37 @@ test.describe('Milestone 9: Finance (Fuel & Expenses) Vertical Slice Acceptance 
     await expect(page.getByTestId('btn-edit-draft')).toBeVisible();
     await expect(page.getByTestId('btn-post-expense')).toBeVisible();
 
+    // 8b. Expense Receipt: Upload fixture PDF while in DRAFT, download and verify bytes, post expense, verify immutability
+    await expect(page.getByTestId('receipt-section')).toBeVisible();
+    const expenseFixtureBuffer = Buffer.from(
+      '%PDF-1.4 sample expense receipt content deterministic bytes 67890',
+    );
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'sample_expense_receipt.pdf',
+      mimeType: 'application/pdf',
+      buffer: expenseFixtureBuffer,
+    });
+    await page.getByTestId('btn-upload-receipt').click();
+    await expect(page.getByTestId('attached-receipt-name')).toContainText(
+      'sample_expense_receipt.pdf',
+    );
+
+    // Real Browser Download: Trigger download for expense receipt
+    const [expenseDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('btn-download-receipt').click(),
+    ]);
+    const expenseDownloadPath = await expenseDownload.path();
+    expect(expenseDownloadPath).toBeTruthy();
+    const downloadedExpenseBytes = fs.readFileSync(expenseDownloadPath!);
+    expect(downloadedExpenseBytes).toEqual(expenseFixtureBuffer);
+    const expenseSha256 = crypto.createHash('sha256').update(downloadedExpenseBytes).digest('hex');
+    const expectedExpenseSha = crypto
+      .createHash('sha256')
+      .update(expenseFixtureBuffer)
+      .digest('hex');
+    expect(expenseSha256).toBe(expectedExpenseSha);
+
     // Edit Draft
     await page.getByTestId('btn-edit-draft').click();
     await expect(page.getByTestId('edit-draft-form')).toBeVisible();
@@ -156,6 +228,13 @@ test.describe('Milestone 9: Finance (Fuel & Expenses) Vertical Slice Acceptance 
     await page.getByTestId('btn-post-expense').click();
     await expect(page.getByTestId('expense-status')).toHaveText('POSTED');
     await expect(page.getByTestId('btn-void-expense')).toBeVisible();
+
+    // Immutability after post: upload form is gone
+    await expect(page.getByTestId('upload-receipt-form')).not.toBeVisible();
+    const expPageHtml = await page.content();
+    expect(expPageHtml).not.toContain('receipts/');
+    expect(expPageHtml).not.toContain('vehicle-management/');
+    expect(expPageHtml).not.toContain('localhost:9000');
 
     // Void Expense
     await page.getByTestId('btn-void-expense').click();
@@ -180,5 +259,181 @@ test.describe('Milestone 9: Finance (Fuel & Expenses) Vertical Slice Acceptance 
     await expect(page.getByTestId('vehicle-fuel-efficiency')).toBeVisible();
     await expect(page.getByTestId('metric-km-per-unit')).toBeVisible();
     await expect(page.getByTestId('metric-cost-per-km')).toBeVisible();
+  });
+
+  test('enforces RBAC permissions: Dev Viewer has read-only finance access and action buttons are hidden', async ({
+    page,
+  }) => {
+    // 1. Switch to Dev Viewer
+    await page.goto('/finance');
+    const switchViewerBtn = page.getByTestId('auth-viewer-btn');
+    await expect(switchViewerBtn).toBeVisible();
+    await switchViewerBtn.click();
+    await expect(page.getByTestId('user-badge')).toContainText('Development Viewer');
+
+    // 2. Finance Dashboard is accessible in read-only mode
+    await expect(page.getByTestId('finance-title')).toBeVisible();
+
+    // 3. Fuel transactions page: "+ Log Fuel" and "Import CSV" buttons must be hidden for viewer
+    await page.goto('/fuel');
+    await expect(page.getByTestId('fuel-title')).toBeVisible();
+    await expect(page.getByTestId('btn-log-fuel')).not.toBeVisible();
+    await expect(page.getByTestId('btn-import-csv')).not.toBeVisible();
+
+    // 3b. Detail page read-only inspection: click first transaction and verify action buttons & receipt download are hidden
+    const firstRowLink = page.locator('[data-testid^="link-fuel-"]').first();
+    if (await firstRowLink.isVisible()) {
+      await firstRowLink.click();
+      await expect(page.getByTestId('fuel-display-id')).toBeVisible();
+      await expect(page.getByTestId('btn-void-transaction')).not.toBeVisible();
+      await expect(page.getByTestId('upload-receipt-form')).not.toBeVisible();
+      await expect(page.getByTestId('btn-download-receipt')).not.toBeVisible();
+    }
+
+    // 4. Expenses page: "+ New Expense" button must be hidden for viewer
+    await page.goto('/expenses');
+    await expect(page.getByTestId('expenses-title')).toBeVisible();
+    await expect(page.getByTestId('btn-new-expense')).not.toBeVisible();
+
+    // 5. Expense categories page: "Create Category" form must be hidden for viewer
+    await page.goto('/expense-categories');
+    await expect(page.getByTestId('categories-title')).toBeVisible();
+    await expect(page.getByTestId('btn-create-category')).not.toBeVisible();
+
+    // 6. Restore Admin session
+    await page.getByTestId('auth-admin-btn').click();
+    await expect(page.getByTestId('user-badge')).toContainText('Development Admin');
+  });
+
+  test('exercises trip cost attribution and currency-segregated financial reporting with zero FX conversion', async ({
+    page,
+  }) => {
+    test.setTimeout(90000);
+
+    const timestamp = Date.now().toString().slice(-6);
+    const vehicleDisplayId = `V-TRIP-${timestamp}`;
+    const vehicleReg = `TR-${timestamp.slice(-4)}TX`;
+    const safeTag = timestamp
+      .toUpperCase()
+      .replace(/[^A-HJ-NPR-Z0-9]/g, 'X')
+      .slice(-6)
+      .padStart(6, '0');
+    const vehicleVin = `1HGCR2F83MB${safeTag}`;
+
+    // 1. Create and activate vehicle
+    await page.goto('/vehicles/new');
+    await page.getByTestId('input-display-id').fill(vehicleDisplayId);
+    await page.getByTestId('input-registration').fill(vehicleReg);
+    await page.getByTestId('input-vin').fill(vehicleVin);
+    await page.getByTestId('input-model').fill('Freightliner Cascadia');
+    await page.getByTestId('select-type').selectOption('TRUCK');
+    await page.getByTestId('select-fuel-type').selectOption('DIESEL');
+    await page.getByTestId('input-year').fill('2024');
+    await page.getByTestId('input-odometer').fill('50000');
+    await page.getByTestId('submit-vehicle').click();
+    await expect(page).toHaveURL(/\/vehicles\/[0-9a-f-]+/u);
+    const vehicleId = page.url().split('/').pop()!;
+    await page.getByTestId('activate-vehicle-btn').click();
+    await expect(page.getByTestId('detail-status')).toHaveText('ACTIVE');
+
+    // 2. Create driver and add license, then activate
+    await page.goto('/drivers/new');
+    const driverDisplayId = `D-TRIP-${timestamp}`;
+    const empNumber = `EMP-${timestamp}`;
+    await page.getByTestId('display-id-input').fill(driverDisplayId);
+    await page.getByTestId('employee-number-input').fill(empNumber);
+    await page.getByTestId('first-name-input').fill('Sarah');
+    await page.getByTestId('last-name-input').fill('Connor');
+    await page.getByTestId('email-input').fill(`sarah.${timestamp}@example.test`);
+    await page.getByTestId('phone-input').fill('+1-555-0199');
+    await page.getByTestId('submit-driver-button').click();
+    await expect(page).toHaveURL(/\/drivers\/[0-9a-f-]+/u);
+    const driverId = page.url().split('/').pop()!;
+
+    // Add driver license
+    await page.getByTestId('add-license-button').click();
+    await page.getByTestId('license-number-input').fill(`DL-${timestamp}`);
+    await page.getByTestId('license-country-input').fill('US');
+    await page.getByTestId('license-region-input').fill('CA');
+    await page.getByTestId('license-classes-input').fill('B, C');
+    await page.getByTestId('license-issue-date-input').fill('2024-01-01');
+    await page.getByTestId('license-expiry-date-input').fill('2030-01-01');
+    await page.getByTestId('save-license-button').click();
+    await expect(page.getByTestId('licenses-table')).toContainText(`DL-${timestamp}`);
+
+    // Activate driver
+    await page.getByTestId('activate-driver-button').click();
+    await expect(page.getByTestId('driver-status-badge-active')).toBeVisible();
+
+    // 3. Create active assignment
+    await page.goto('/assignments/new');
+    await page.getByTestId('vehicle-select').selectOption(vehicleId);
+    await page.getByTestId('driver-select').selectOption(driverId);
+    await page.getByTestId('submit-assignment-button').click();
+    await expect(page).toHaveURL(/\/assignments\/[0-9a-f-]+/u);
+    const assignmentId = page.url().split('/').pop()!;
+
+    // 4. Create trip
+    await page.goto('/trips/new');
+    await page.getByTestId('assignment-select').selectOption(assignmentId);
+    await page.getByTestId('origin-input').fill('Long Beach Port');
+    await page.getByTestId('destination-input').fill('Reno Logistics Center');
+    await page.getByTestId('submit-trip-btn').click();
+    await expect(page).toHaveURL(/\/trips\/[0-9a-f-]+/u);
+    const tripId = page.url().split('/').pop()!;
+
+    // 5. Log Fuel transaction attributed to this trip in USD
+    await page.goto('/fuel/new');
+    await page.getByTestId('input-vehicle').selectOption(vehicleId);
+    await page.getByTestId('input-trip').fill(tripId);
+    await page.getByTestId('input-quantity').fill('60');
+    await page.getByTestId('input-unit-price').fill('1.50');
+    await page.getByTestId('input-currency').fill('USD');
+    await page.getByTestId('input-odometer').fill('50400');
+    await page.getByTestId('submit-fuel').click();
+    await expect(page).toHaveURL(/\/fuel\/[0-9a-f-]+/u);
+    await expect(page.getByTestId('fuel-total-amount')).toContainText('90.00 USD');
+
+    // 6. Log an Expense attributed to this trip in USD
+    await page.goto('/expenses/new');
+    await page.getByTestId('input-trip').fill(tripId);
+    await page.getByTestId('input-status').selectOption('POSTED');
+    await page.getByTestId('input-description').fill('Truck scale weighing fee');
+    await page.getByTestId('input-amount').fill('25.00');
+    await page.getByTestId('input-currency').fill('USD');
+    await page.getByTestId('input-vendor').fill('Weigh Station #4');
+    await page.getByTestId('submit-expense').click();
+    await expect(page).toHaveURL(/\/expenses\/[0-9a-f-]+/u);
+    await expect(page.getByTestId('expense-status')).toHaveText('POSTED');
+
+    // 7. Log a second transaction in JPY for multi-currency segregation testing
+    await page.goto('/fuel/new');
+    await page.getByTestId('input-vehicle').selectOption(vehicleId);
+    await page.getByTestId('input-quantity').fill('20');
+    await page.getByTestId('input-unit-price').fill('160');
+    await page.getByTestId('input-currency').fill('JPY');
+    await page.getByTestId('submit-fuel').click();
+    await expect(page).toHaveURL(/\/fuel\/[0-9a-f-]+/u);
+    await expect(page.getByTestId('fuel-total-amount')).toContainText('3200');
+    await expect(page.getByTestId('fuel-total-amount')).toContainText('JPY');
+
+    // 8. Verify Trip Finance Section on Trip Detail Page
+    await page.goto(`/trips/${tripId}`);
+    await expect(page.getByTestId('section-trip-finance')).toBeVisible();
+    await expect(page.getByTestId('trip-cost-totals')).toBeVisible();
+    await expect(page.getByTestId('trip-fuel-table')).toBeVisible();
+    await expect(page.getByTestId('trip-expenses-table')).toBeVisible();
+
+    // 9. Verify Multi-Currency Dashboard at /finance
+    await page.goto('/finance');
+    await expect(page.getByTestId('finance-title')).toBeVisible();
+    await expect(page.getByTestId('currency-card-USD')).toBeVisible();
+    await expect(page.getByTestId('currency-card-JPY')).toBeVisible();
+
+    // Zero FX conversion verification: USD and JPY are segregated in distinct cards
+    await expect(page.getByTestId('fuel-total-USD')).toBeVisible();
+    await expect(page.getByTestId('fuel-total-JPY')).toBeVisible();
+    await expect(page.getByTestId('grand-total-USD')).toContainText('USD');
+    await expect(page.getByTestId('grand-total-JPY')).toContainText('JPY');
   });
 });

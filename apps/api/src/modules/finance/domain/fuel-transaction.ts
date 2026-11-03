@@ -5,14 +5,15 @@ import {
   type FuelType,
 } from '@vms/database';
 import {
+  ConcurrencyConflictError,
+  EvidenceImmutableError,
   FuelTransactionAlreadyVoidedError,
   InvalidFuelTransactionStateError,
 } from './finance-errors.js';
 import {
   assertValidCurrencyCode,
   calculateFuelTotalAmount,
-  isAmountWithinTolerance,
-  roundTo2Decimals,
+  roundMoneyToCurrency,
   roundTo3Decimals,
   roundTo4Decimals,
 } from './money.js';
@@ -130,25 +131,28 @@ export class FuelTransaction {
       throw new InvalidFuelTransactionStateError('Fuel unit price cannot be negative');
     }
 
+    const validatedCurrency = assertValidCurrencyCode(params.currencyCode);
     const roundedQuantity = roundTo3Decimals(params.quantity);
     const roundedUnitPrice = roundTo4Decimals(params.unitPrice);
-    const calculatedTotal = calculateFuelTotalAmount(roundedQuantity, roundedUnitPrice);
+    const calculatedTotal = calculateFuelTotalAmount(
+      roundedQuantity,
+      roundedUnitPrice,
+      validatedCurrency,
+    );
 
     let finalTotal = calculatedTotal;
     if (params.totalAmount !== undefined && params.totalAmount !== null) {
-      const roundedProvidedTotal = roundTo2Decimals(params.totalAmount);
-      if (roundedProvidedTotal < 0) {
+      const roundedProvidedTotal = roundMoneyToCurrency(params.totalAmount, validatedCurrency);
+      if (roundedProvidedTotal.isNegative()) {
         throw new InvalidFuelTransactionStateError('Total amount cannot be negative');
       }
-      if (!isAmountWithinTolerance(calculatedTotal, roundedProvidedTotal, 0.05)) {
+      if (!roundedProvidedTotal.equals(calculatedTotal)) {
         throw new InvalidFuelTransactionStateError(
-          `Provided total amount ${roundedProvidedTotal} differs significantly from calculated ${calculatedTotal} (quantity * unitPrice)`,
+          `Provided total amount ${roundedProvidedTotal.toFixed()} does not match calculated total ${calculatedTotal.toFixed()} (${roundedQuantity.toFixed()} * ${roundedUnitPrice.toFixed()}) for currency ${validatedCurrency}`,
         );
       }
       finalTotal = roundedProvidedTotal;
     }
-
-    const validatedCurrency = assertValidCurrencyCode(params.currencyCode);
 
     let validatedOdometer: number | null = null;
     if (params.odometerKm !== undefined && params.odometerKm !== null) {
@@ -169,10 +173,10 @@ export class FuelTransaction {
       params.tripId ?? null,
       params.occurredAt,
       params.energyType,
-      roundedQuantity,
+      roundedQuantity.toNumber(),
       params.quantityUnit ?? FuelQuantityUnit.LITER,
-      roundedUnitPrice,
-      finalTotal,
+      roundedUnitPrice.toNumber(),
+      finalTotal.toNumber(),
       validatedCurrency,
       validatedOdometer,
       params.stationName?.trim() || null,
@@ -205,7 +209,13 @@ export class FuelTransaction {
       params.quantity,
       params.quantityUnit ?? FuelQuantityUnit.LITER,
       params.unitPrice,
-      params.totalAmount ?? calculateFuelTotalAmount(params.quantity, params.unitPrice),
+      params.totalAmount !== undefined && params.totalAmount !== null
+        ? Number(params.totalAmount)
+        : calculateFuelTotalAmount(
+            params.quantity,
+            params.unitPrice,
+            params.currencyCode,
+          ).toNumber(),
       params.currencyCode,
       params.odometerKm ?? null,
       params.stationName ?? null,
@@ -225,9 +235,19 @@ export class FuelTransaction {
     );
   }
 
-  public voidTransaction(reason: string, voidedBy: string, voidedAt = new Date()): void {
+  public voidTransaction(
+    reason: string,
+    voidedBy: string,
+    expectedVersion?: number,
+    voidedAt = new Date(),
+  ): void {
     if (this._status === FuelTransactionStatus.VOIDED) {
       throw new FuelTransactionAlreadyVoidedError(this.id);
+    }
+    if (expectedVersion !== undefined && expectedVersion !== this._version) {
+      throw new ConcurrencyConflictError(
+        `Fuel transaction version conflict. Expected version ${expectedVersion}, current version ${this._version}`,
+      );
     }
     const cleanReason = reason.trim();
     if (!cleanReason) {
@@ -245,9 +265,24 @@ export class FuelTransaction {
     this._version += 1;
   }
 
-  public attachReceipt(receipt: FuelReceiptInfo, updatedBy: string, updatedAt = new Date()): void {
+  public attachReceipt(
+    receipt: FuelReceiptInfo,
+    updatedBy: string,
+    expectedVersion?: number,
+    updatedAt = new Date(),
+  ): void {
     if (this._status === FuelTransactionStatus.VOIDED) {
       throw new FuelTransactionAlreadyVoidedError(this.id);
+    }
+    if (this._receipt !== null) {
+      throw new EvidenceImmutableError(
+        'Fuel transaction already has an attached receipt. To replace receipt, void and recreate transaction.',
+      );
+    }
+    if (expectedVersion !== undefined && expectedVersion !== this._version) {
+      throw new ConcurrencyConflictError(
+        `Fuel transaction version conflict. Expected version ${expectedVersion}, current version ${this._version}`,
+      );
     }
     this._receipt = receipt;
     this._updatedAt = updatedAt;
@@ -255,14 +290,10 @@ export class FuelTransaction {
     this._version += 1;
   }
 
-  public detachReceipt(updatedBy: string, updatedAt = new Date()): void {
-    if (this._status === FuelTransactionStatus.VOIDED) {
-      throw new FuelTransactionAlreadyVoidedError(this.id);
-    }
-    this._receipt = null;
-    this._updatedAt = updatedAt;
-    this._updatedBy = updatedBy;
-    this._version += 1;
+  public detachReceipt(): void {
+    throw new EvidenceImmutableError(
+      'Fuel receipts are immutable once attached and cannot be detached.',
+    );
   }
 
   public get quantity(): number {

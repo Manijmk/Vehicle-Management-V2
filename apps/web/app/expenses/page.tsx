@@ -6,6 +6,7 @@ import { TenantHeader } from '../../components/tenant-header';
 import {
   financeApi,
   vehicleApi,
+  type CurrentUserResponse,
   type ExpenseCategoryRecord,
   type ExpenseRecord,
   type ExpenseStatus,
@@ -13,6 +14,7 @@ import {
 } from '../../lib/api-client';
 
 export default function ExpensesListPage() {
+  const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [categories, setCategories] = useState<ExpenseCategoryRecord[]>([]);
   const [vehicles, setVehicles] = useState<VehicleRecord[]>([]);
@@ -30,7 +32,7 @@ export default function ExpensesListPage() {
     try {
       setLoading(true);
       setError(null);
-      const [expRes, catRes, vehRes] = await Promise.all([
+      const [expRes, catRes, vehRes, user] = await Promise.all([
         financeApi.fetchExpenses({
           categoryId: categoryIdFilter || undefined,
           vehicleId: vehicleIdFilter || undefined,
@@ -39,11 +41,13 @@ export default function ExpensesListPage() {
         }),
         financeApi.fetchExpenseCategories(true),
         vehicleApi.fetchVehicles(),
+        vehicleApi.fetchCurrentUser().catch(() => null),
       ]);
       setExpenses(expRes.items);
       setTotal(expRes.total);
       setCategories(catRes);
       setVehicles(vehRes);
+      setCurrentUser(user);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load expenses');
     } finally {
@@ -54,6 +58,8 @@ export default function ExpensesListPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  const canCreate = Boolean(currentUser?.permissions.includes('expense.create'));
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem' }}>
@@ -83,20 +89,22 @@ export default function ExpensesListPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Link
-            href="/expenses/new"
-            style={{
-              padding: '0.5rem 1rem',
-              background: '#059669',
-              color: '#fff',
-              borderRadius: '6px',
-              textDecoration: 'none',
-              fontWeight: 500,
-            }}
-            data-testid="btn-new-expense"
-          >
-            + New Expense
-          </Link>
+          {canCreate && (
+            <Link
+              href="/expenses/new"
+              style={{
+                padding: '0.5rem 1rem',
+                background: '#059669',
+                color: '#fff',
+                borderRadius: '6px',
+                textDecoration: 'none',
+                fontWeight: 500,
+              }}
+              data-testid="btn-new-expense"
+            >
+              + New Expense
+            </Link>
+          )}
           <Link
             href="/expense-categories"
             style={{

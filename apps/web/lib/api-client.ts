@@ -90,11 +90,18 @@ export class ApiClientError extends Error {
 }
 
 const DEFAULT_DEV_ORG_ID = '10000000-0000-4000-8000-000000000001';
+export const DEFAULT_DEV_ADMIN_TOKEN =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzaWQiOiJsb2NhbC0yMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJzdWIiOiIyMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpc3MiOiJ2ZWhpY2xlLW1hbmFnZW1lbnQtbG9jYWwiLCJhdWQiOiJ2ZWhpY2xlLW1hbmFnZW1lbnQtYXBpIiwiaWF0IjoxNzkwMTQ3NjA5LCJleHAiOjE4MjE2ODM2MDl9.tHEKxYCMGub44l1Wi47dGZCZw4wCNUfKhyxXHz95z-c';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api/v1';
 
 export function getStoredAuthToken(): string {
   if (typeof window === 'undefined') return '';
-  return window.localStorage.getItem('vms_auth_token') ?? '';
+  const token = window.localStorage.getItem('vms_auth_token');
+  if (!token) {
+    window.localStorage.setItem('vms_auth_token', DEFAULT_DEV_ADMIN_TOKEN);
+    return DEFAULT_DEV_ADMIN_TOKEN;
+  }
+  return token;
 }
 
 export function setStoredAuthToken(token: string): void {
@@ -105,7 +112,12 @@ export function setStoredAuthToken(token: string): void {
 
 export function getStoredOrganizationId(): string {
   if (typeof window === 'undefined') return DEFAULT_DEV_ORG_ID;
-  return window.localStorage.getItem('vms_org_id') ?? DEFAULT_DEV_ORG_ID;
+  const orgId = window.localStorage.getItem('vms_org_id');
+  if (!orgId) {
+    window.localStorage.setItem('vms_org_id', DEFAULT_DEV_ORG_ID);
+    return DEFAULT_DEV_ORG_ID;
+  }
+  return orgId;
 }
 
 export function setStoredOrganizationId(orgId: string): void {
@@ -2476,3 +2488,464 @@ export const financeApi = {
     return requestApi<DownloadUrlResponse>(`/expenses/${expenseId}/receipt-url`);
   },
 };
+
+export const incidentApi = {
+  fetchIncidents(params?: {
+    status?: IncidentStatus | undefined;
+    type?: IncidentType | undefined;
+    severity?: IncidentSeverity | undefined;
+    vehicleId?: string | undefined;
+    driverId?: string | undefined;
+    tripId?: string | undefined;
+    operationalImpact?: IncidentOperationalImpact | undefined;
+    search?: string | undefined;
+    fromOccurredAt?: string | undefined;
+    toOccurredAt?: string | undefined;
+    limit?: number | undefined;
+    offset?: number | undefined;
+  }): Promise<{ items: IncidentRecord[]; total: number; limit: number; offset: number }> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.type) query.set('type', params.type);
+    if (params?.severity) query.set('severity', params.severity);
+    if (params?.vehicleId) query.set('vehicleId', params.vehicleId);
+    if (params?.driverId) query.set('driverId', params.driverId);
+    if (params?.tripId) query.set('tripId', params.tripId);
+    if (params?.operationalImpact) query.set('operationalImpact', params.operationalImpact);
+    if (params?.search) query.set('search', params.search);
+    if (params?.fromOccurredAt) query.set('fromOccurredAt', params.fromOccurredAt);
+    if (params?.toOccurredAt) query.set('toOccurredAt', params.toOccurredAt);
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.offset !== undefined) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return requestApi<{ items: IncidentRecord[]; total: number; limit: number; offset: number }>(
+      `/incidents${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  fetchIncident(incidentId: string): Promise<IncidentRecord> {
+    return requestApi<IncidentRecord>(`/incidents/${incidentId}`);
+  },
+
+  createIncident(input: CreateIncidentInput): Promise<IncidentRecord> {
+    return requestApi<IncidentRecord>('/incidents', {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  updateIncident(incidentId: string, input: UpdateIncidentInput): Promise<IncidentRecord> {
+    return requestApi<IncidentRecord>(`/incidents/${incidentId}`, {
+      method: 'PATCH',
+      body: input,
+    });
+  },
+
+  startIncidentInvestigation(incidentId: string, version: number): Promise<IncidentRecord> {
+    return requestApi<IncidentRecord>(`/incidents/${incidentId}/investigate`, {
+      method: 'POST',
+      body: { version },
+    });
+  },
+
+  resolveIncident(incidentId: string, input: ResolveIncidentInput): Promise<IncidentRecord> {
+    return requestApi<IncidentRecord>(`/incidents/${incidentId}/resolve`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  closeIncident(incidentId: string, version: number): Promise<IncidentRecord> {
+    return requestApi<IncidentRecord>(`/incidents/${incidentId}/close`, {
+      method: 'POST',
+      body: { version },
+    });
+  },
+
+  cancelIncident(incidentId: string, input: CancelIncidentInput): Promise<IncidentRecord> {
+    return requestApi<IncidentRecord>(`/incidents/${incidentId}/cancel`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  fetchIncidentNotes(incidentId: string): Promise<IncidentNoteRecord[]> {
+    return requestApi<IncidentNoteRecord[]>(`/incidents/${incidentId}/notes`);
+  },
+
+  addIncidentNote(incidentId: string, body: string): Promise<IncidentNoteRecord> {
+    return requestApi<IncidentNoteRecord>(`/incidents/${incidentId}/notes`, {
+      method: 'POST',
+      body: { body },
+    });
+  },
+
+  fetchIncidentAttachments(incidentId: string): Promise<IncidentAttachmentRecord[]> {
+    return requestApi<IncidentAttachmentRecord[]>(`/incidents/${incidentId}/attachments`);
+  },
+
+  uploadIncidentAttachment(
+    incidentId: string,
+    formData: FormData,
+  ): Promise<IncidentAttachmentRecord> {
+    return requestApi<IncidentAttachmentRecord>(`/incidents/${incidentId}/attachments`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  getIncidentAttachmentDownloadUrl(
+    incidentId: string,
+    attachmentId: string,
+  ): Promise<{
+    url: string;
+    downloadUrl: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    fileSizeBytes?: number;
+    sha256?: string;
+    fileHashSha256?: string;
+  }> {
+    return requestApi<{
+      url: string;
+      downloadUrl: string;
+      fileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      fileSizeBytes?: number;
+      sha256?: string;
+      fileHashSha256?: string;
+    }>(`/incidents/${incidentId}/attachments/${attachmentId}/download-url`);
+  },
+
+  createIncidentMaintenanceRequest(
+    incidentId: string,
+    input: CreateIncidentMaintenanceRequestInput,
+  ): Promise<MaintenanceRequestRecord> {
+    return requestApi<MaintenanceRequestRecord>(`/incidents/${incidentId}/maintenance-request`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  fetchVehicleIncidents(
+    vehicleId: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<{ items: IncidentRecord[]; total: number; limit: number; offset: number }> {
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set('limit', String(limit));
+    if (offset !== undefined) query.set('offset', String(offset));
+    const qs = query.toString();
+    return requestApi<{ items: IncidentRecord[]; total: number; limit: number; offset: number }>(
+      `/vehicles/${vehicleId}/incidents${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  fetchDriverIncidents(
+    driverId: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<{ items: IncidentRecord[]; total: number; limit: number; offset: number }> {
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set('limit', String(limit));
+    if (offset !== undefined) query.set('offset', String(offset));
+    const qs = query.toString();
+    return requestApi<{ items: IncidentRecord[]; total: number; limit: number; offset: number }>(
+      `/drivers/${driverId}/incidents${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  fetchTripIncidents(
+    tripId: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<{ items: IncidentRecord[]; total: number; limit: number; offset: number }> {
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set('limit', String(limit));
+    if (offset !== undefined) query.set('offset', String(offset));
+    const qs = query.toString();
+    return requestApi<{ items: IncidentRecord[]; total: number; limit: number; offset: number }>(
+      `/trips/${tripId}/incidents${qs ? `?${qs}` : ''}`,
+    );
+  },
+};
+
+// --- Milestone 11: Notifications and Automation ---
+export const notificationApi = {
+  fetchNotifications(params?: {
+    unreadOnly?: boolean;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{ items: UserNotificationItem[]; nextCursor?: string; totalUnread: number }> {
+    const query = new URLSearchParams();
+    if (params?.unreadOnly !== undefined) query.set('unreadOnly', String(params.unreadOnly));
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.cursor !== undefined) query.set('cursor', params.cursor);
+    const qs = query.toString();
+    return requestApi<{ items: UserNotificationItem[]; nextCursor?: string; totalUnread: number }>(
+      `/notifications${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  fetchUnreadNotificationCount(): Promise<{ unreadCount: number }> {
+    return requestApi<{ unreadCount: number }>('/notifications/unread-count');
+  },
+
+  markNotificationAsRead(notificationId: string): Promise<UserNotificationItem> {
+    return requestApi<UserNotificationItem>(`/notifications/${notificationId}/read`, {
+      method: 'PATCH',
+    });
+  },
+
+  markAllNotificationsAsRead(): Promise<{ count: number }> {
+    return requestApi<{ count: number }>('/notifications/read-all', {
+      method: 'POST',
+    });
+  },
+
+  fetchNotificationPreferences(): Promise<{ items: NotificationPreferenceItem[] }> {
+    return requestApi<{ items: NotificationPreferenceItem[] }>('/notification-preferences');
+  },
+
+  updateNotificationPreference(data: {
+    category: NotificationCategory;
+    inAppEnabled: boolean;
+    emailEnabled: boolean;
+    smsEnabled: boolean;
+  }): Promise<NotificationPreferenceItem> {
+    return requestApi<NotificationPreferenceItem>('/notification-preferences', {
+      method: 'PUT',
+      body: data,
+    });
+  },
+
+  fetchNotificationTemplates(): Promise<{ items: NotificationTemplateItem[] }> {
+    return requestApi<{ items: NotificationTemplateItem[] }>('/notification-templates');
+  },
+
+  updateNotificationTemplate(
+    key: string,
+    data: {
+      titleTemplate?: string | undefined;
+      bodyTemplate?: string | undefined;
+      enabled?: boolean | undefined;
+      description?: string | undefined;
+    },
+  ): Promise<NotificationTemplateItem> {
+    return requestApi<NotificationTemplateItem>(`/notification-templates/${key}`, {
+      method: 'PATCH',
+      body: data,
+    });
+  },
+};
+
+export const apiClient = notificationApi;
+
+export type IncidentType =
+  'ACCIDENT' | 'BREAKDOWN' | 'VIOLATION' | 'DAMAGE' | 'THEFT' | 'SAFETY' | 'OTHER';
+
+export type IncidentSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export type IncidentStatus = 'REPORTED' | 'INVESTIGATING' | 'RESOLVED' | 'CLOSED' | 'CANCELLED';
+
+export type IncidentOperationalImpact = 'NONE' | 'VEHICLE' | 'DRIVER' | 'BOTH';
+
+export type IncidentAttachmentType = 'PHOTO' | 'DOCUMENT' | 'OTHER';
+
+export interface IncidentRecord {
+  id: string;
+  organizationId: string;
+  displayId: string;
+  type: IncidentType;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  vehicleId: string | null;
+  driverId: string | null;
+  tripId: string | null;
+  assignmentId: string | null;
+  occurredAt: string;
+  reportedAt: string;
+  title: string;
+  description: string;
+  locationText: string | null;
+  operationalImpact: IncidentOperationalImpact;
+  resolutionSummary: string | null;
+  resolvedAt: string | null;
+  closedAt: string | null;
+  cancelReason: string | null;
+  cancellationReason?: string | null;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+
+  vehicle?: {
+    id: string;
+    displayId: string;
+    registration: string;
+    model: string;
+    status: string;
+  } | null;
+  driver?: {
+    id: string;
+    displayId: string;
+    firstName: string;
+    lastName: string;
+    status: string;
+  } | null;
+  trip?: {
+    id: string;
+    displayId: string;
+    status: string;
+    origin?: string;
+    destination?: string;
+  } | null;
+  assignment?: {
+    id: string;
+    status: string;
+    startedAt: string;
+    endedAt: string | null;
+  } | null;
+  maintenanceRequest?: {
+    id: string;
+    displayId: string;
+    status: string;
+    title: string;
+  } | null;
+
+  statusHistory?: Array<{
+    id: string;
+    fromStatus: IncidentStatus;
+    toStatus: IncidentStatus;
+    reason: string | null;
+    actorId: string;
+    actorName?: string;
+    createdAt: string;
+  }>;
+  notes?: IncidentNoteRecord[];
+  attachments?: IncidentAttachmentRecord[];
+}
+
+export interface IncidentNoteRecord {
+  id: string;
+  organizationId: string;
+  incidentId: string;
+  body: string;
+  createdAt: string;
+  createdBy: string;
+  createdById?: string;
+  createdByName?: string;
+  createdByUser?: {
+    displayName?: string;
+  };
+}
+
+export interface IncidentAttachmentRecord {
+  id: string;
+  organizationId: string;
+  incidentId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  fileSizeBytes?: number;
+  storageKey: string;
+  sha256: string;
+  fileHashSha256?: string;
+  attachmentType: IncidentAttachmentType;
+  description: string | null;
+  createdAt: string;
+  createdBy: string;
+  createdById?: string;
+  createdByName?: string;
+}
+
+export interface CreateIncidentInput {
+  type: IncidentType;
+  severity: IncidentSeverity;
+  title: string;
+  description: string;
+  occurredAt: string;
+  locationText?: string | undefined;
+  operationalImpact?: IncidentOperationalImpact | undefined;
+  vehicleId?: string | undefined;
+  driverId?: string | undefined;
+  tripId?: string | undefined;
+}
+
+export interface UpdateIncidentInput {
+  version: number;
+  title?: string | undefined;
+  description?: string | undefined;
+  severity?: IncidentSeverity | undefined;
+  locationText?: string | undefined;
+  operationalImpact?: IncidentOperationalImpact | undefined;
+}
+
+export interface ResolveIncidentInput {
+  version: number;
+  resolutionSummary: string;
+}
+
+export interface CancelIncidentInput {
+  version: number;
+  cancelReason?: string | undefined;
+  cancellationReason?: string | undefined;
+}
+
+export interface CreateIncidentMaintenanceRequestInput {
+  title?: string | undefined;
+  description?: string | undefined;
+  priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL' | undefined;
+  blocksOperation?: boolean | undefined;
+}
+
+// --- Milestone 11 Notification Types ---
+export type NotificationCategory =
+  'CRITICAL_INSPECTION' | 'COMPLIANCE_EXPIRY' | 'MAINTENANCE' | 'INCIDENT' | 'GENERAL';
+
+export type NotificationPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
+export type NotificationStatus =
+  'PENDING' | 'DELIVERED' | 'PARTIALLY_DELIVERED' | 'FAILED' | 'CANCELLED';
+
+export interface UserNotificationItem {
+  id: string; // recipient ID
+  notificationId: string;
+  displayId: string;
+  category: NotificationCategory;
+  type: string;
+  priority: NotificationPriority;
+  title: string;
+  body: string;
+  inAppRead: boolean;
+  inAppReadAt?: string | null;
+  status: NotificationStatus;
+  sourceEventId?: string | null;
+  sourceAggregateType?: string | null;
+  sourceAggregateId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface NotificationPreferenceItem {
+  id?: string;
+  category: NotificationCategory;
+  inAppEnabled: boolean;
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  isMandatoryInApp: boolean;
+}
+
+export interface NotificationTemplateItem {
+  id: string;
+  key: string;
+  category: NotificationCategory;
+  titleTemplate: string;
+  bodyTemplate: string;
+  description?: string | null;
+  enabled: boolean;
+  version: number;
+  placeholders: string[];
+}

@@ -93,6 +93,9 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort, OnModuleInit {
       const command = new GetObjectCommand({
         Bucket: this.bucket,
         Key: params.objectKey,
+        ResponseContentDisposition: params.fileName
+          ? `attachment; filename="${encodeURIComponent(params.fileName)}"`
+          : undefined,
       });
 
       return await getSignedUrl(this.client, command, {

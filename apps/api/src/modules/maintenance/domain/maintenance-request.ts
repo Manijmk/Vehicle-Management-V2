@@ -1,6 +1,6 @@
 import { ApplicationError } from '../../foundation/domain/errors.js';
 
-export type MaintenanceRequestSource = 'MANUAL' | 'INSPECTION' | 'PREVENTIVE';
+export type MaintenanceRequestSource = 'MANUAL' | 'INSPECTION' | 'PREVENTIVE' | 'INCIDENT';
 export type MaintenancePriority = 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
 export type MaintenanceRequestStatus = 'OPEN' | 'CONVERTED' | 'CANCELLED';
 
@@ -53,6 +53,7 @@ export interface MaintenanceRequest {
   readonly vehicleId: string;
   readonly sourceType: MaintenanceRequestSource;
   readonly sourceInspectionId: string | null;
+  readonly sourceIncidentId?: string | null;
   readonly title: string;
   readonly description: string | null;
   readonly priority: MaintenancePriority;

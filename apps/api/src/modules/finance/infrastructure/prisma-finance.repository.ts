@@ -11,6 +11,7 @@ import {
   type FuelTransactionSource as PrismaFuelTransactionSource,
   FuelTransactionStatus as PrismaFuelTransactionStatus,
   type FuelType as PrismaFuelType,
+  type FuelImportStatus,
 } from '@vms/database';
 import { DATABASE } from '../../../common/tokens.js';
 import type {
@@ -21,6 +22,7 @@ import type {
   FinanceMutationMetadata,
   FinanceRepository,
   FinanceSummaryResult,
+  FuelImportJobDetail,
   FuelTransactionDetail,
   ListExpensesFilter,
   ListFuelTransactionsFilter,
@@ -30,9 +32,16 @@ import type {
 } from '../application/finance.repository.js';
 import { ExpenseCategory } from '../domain/expense-category.js';
 import { Expense } from '../domain/expense.js';
+import {
+  ConcurrencyConflictError,
+  EvidenceImmutableError,
+  ExpenseNotFoundError,
+  FuelTransactionNotFoundError,
+} from '../domain/finance-errors.js';
 import type { FuelAnomalyItem, HistoricalFuelContext } from '../domain/fuel-anomaly-detector.js';
 import { computeVehicleEfficiency } from '../domain/fuel-metrics.js';
 import { FuelTransaction } from '../domain/fuel-transaction.js';
+import { roundMoneyToCurrency } from '../domain/money.js';
 
 function json<T>(value: T): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -47,19 +56,22 @@ export class PrismaFinanceRepository implements FinanceRepository {
   // =========================================================================
 
   public async allocateFuelDisplayId(organizationId: string): Promise<string> {
-    const existing = await this.db.fuelTransaction.findMany({
-      where: { organizationId },
-      select: { displayId: true },
-    });
-    let maxNumber = 1000;
-    for (const t of existing) {
-      const match = /^FUEL-(\d+)$/i.exec(t.displayId);
-      if (match && match[1]) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNumber) maxNumber = num;
+    return await this.db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('fuel_tx:' || ${organizationId}))`;
+      const existing = await tx.fuelTransaction.findMany({
+        where: { organizationId },
+        select: { displayId: true },
+      });
+      let maxNumber = 1000;
+      for (const t of existing) {
+        const match = /^FUEL-(\d+)$/i.exec(t.displayId);
+        if (match && match[1]) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNumber) maxNumber = num;
+        }
       }
-    }
-    return `FUEL-${maxNumber + 1}`;
+      return `FUEL-${maxNumber + 1}`;
+    });
   }
 
   public async saveFuelTransaction(
@@ -76,55 +88,111 @@ export class PrismaFinanceRepository implements FinanceRepository {
           : 'fuel.receipt.uploaded';
 
     await this.db.$transaction(async (tx) => {
-      await tx.fuelTransaction.upsert({
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('fuel_tx:' || ${txEntity.organizationId}))`;
+
+      const existingFuel = await tx.fuelTransaction.findUnique({
         where: { id: txEntity.id },
-        create: {
-          id: txEntity.id,
-          organizationId: txEntity.organizationId,
-          displayId: txEntity.displayId,
-          vehicleId: txEntity.vehicleId,
-          driverId: txEntity.driverId,
-          tripId: txEntity.tripId,
-          occurredAt: txEntity.occurredAt,
-          energyType: txEntity.energyType as PrismaFuelType,
-          quantity: txEntity.quantity,
-          quantityUnit: txEntity.quantityUnit as PrismaFuelQuantityUnit,
-          unitPrice: txEntity.unitPrice,
-          totalAmount: txEntity.totalAmount,
-          currencyCode: txEntity.currencyCode,
-          odometerKm: txEntity.odometerKm,
-          stationName: txEntity.stationName,
-          referenceNumber: txEntity.referenceNumber,
-          source: txEntity.source as PrismaFuelTransactionSource,
-          status: txEntity.status as PrismaFuelTransactionStatus,
-          voidReason: txEntity.voidReason,
-          voidedAt: txEntity.voidedAt,
-          voidedBy: txEntity.voidedBy,
-          receiptStorageKey: txEntity.receipt?.storageKey ?? null,
-          receiptFileName: txEntity.receipt?.fileName ?? null,
-          receiptContentType: txEntity.receipt?.contentType ?? null,
-          receiptSizeBytes: txEntity.receipt?.sizeBytes ?? null,
-          importBatchId: txEntity.importBatchId,
-          version: txEntity.version,
-          createdAt: txEntity.createdAt,
-          createdBy: txEntity.createdById,
-          updatedAt: txEntity.updatedAt,
-          updatedBy: txEntity.updatedBy,
-        },
-        update: {
-          status: txEntity.status as PrismaFuelTransactionStatus,
-          voidReason: txEntity.voidReason,
-          voidedAt: txEntity.voidedAt,
-          voidedBy: txEntity.voidedBy,
-          receiptStorageKey: txEntity.receipt?.storageKey ?? null,
-          receiptFileName: txEntity.receipt?.fileName ?? null,
-          receiptContentType: txEntity.receipt?.contentType ?? null,
-          receiptSizeBytes: txEntity.receipt?.sizeBytes ?? null,
-          version: txEntity.version,
-          updatedAt: txEntity.updatedAt,
-          updatedBy: txEntity.updatedBy,
-        },
+        select: { id: true },
       });
+
+      if (!existingFuel) {
+        let displayId = txEntity.displayId;
+        const collision = await tx.fuelTransaction.findFirst({
+          where: { organizationId: txEntity.organizationId, displayId },
+          select: { id: true },
+        });
+        if (collision) {
+          const existing = await tx.fuelTransaction.findMany({
+            where: { organizationId: txEntity.organizationId },
+            select: { displayId: true },
+          });
+          let maxNumber = 1000;
+          for (const t of existing) {
+            const match = /^FUEL-(\d+)$/i.exec(t.displayId);
+            if (match && match[1]) {
+              const num = parseInt(match[1], 10);
+              if (num > maxNumber) maxNumber = num;
+            }
+          }
+          displayId = `FUEL-${maxNumber + 1}`;
+        }
+
+        await tx.fuelTransaction.create({
+          data: {
+            id: txEntity.id,
+            organizationId: txEntity.organizationId,
+            displayId,
+            vehicleId: txEntity.vehicleId,
+            driverId: txEntity.driverId,
+            tripId: txEntity.tripId,
+            occurredAt: txEntity.occurredAt,
+            energyType: txEntity.energyType as PrismaFuelType,
+            quantity: txEntity.quantity,
+            quantityUnit: txEntity.quantityUnit as PrismaFuelQuantityUnit,
+            unitPrice: txEntity.unitPrice,
+            totalAmount: txEntity.totalAmount,
+            currencyCode: txEntity.currencyCode,
+            odometerKm: txEntity.odometerKm,
+            stationName: txEntity.stationName,
+            referenceNumber: txEntity.referenceNumber,
+            source: txEntity.source as PrismaFuelTransactionSource,
+            status: txEntity.status as PrismaFuelTransactionStatus,
+            voidReason: txEntity.voidReason,
+            voidedAt: txEntity.voidedAt,
+            voidedBy: txEntity.voidedBy,
+            receiptStorageKey: txEntity.receipt?.storageKey ?? null,
+            receiptFileName: txEntity.receipt?.fileName ?? null,
+            receiptContentType: txEntity.receipt?.contentType ?? null,
+            receiptSizeBytes: txEntity.receipt?.sizeBytes ?? null,
+            importBatchId: txEntity.importBatchId,
+            version: txEntity.version,
+            createdAt: txEntity.createdAt,
+            createdBy: txEntity.createdById,
+            updatedAt: txEntity.updatedAt,
+            updatedBy: txEntity.updatedBy,
+          },
+        });
+      } else {
+        const expectedVersion = txEntity.version - 1;
+        const updateResult = await tx.fuelTransaction.updateMany({
+          where: {
+            id: txEntity.id,
+            organizationId: txEntity.organizationId,
+            version: expectedVersion,
+            ...(eventType === 'FuelTransactionReceiptUpdated' ? { receiptStorageKey: null } : {}),
+          },
+          data: {
+            status: txEntity.status as PrismaFuelTransactionStatus,
+            voidReason: txEntity.voidReason,
+            voidedAt: txEntity.voidedAt,
+            voidedBy: txEntity.voidedBy,
+            receiptStorageKey: txEntity.receipt?.storageKey ?? null,
+            receiptFileName: txEntity.receipt?.fileName ?? null,
+            receiptContentType: txEntity.receipt?.contentType ?? null,
+            receiptSizeBytes: txEntity.receipt?.sizeBytes ?? null,
+            version: txEntity.version,
+            updatedAt: txEntity.updatedAt,
+            updatedBy: txEntity.updatedBy,
+          },
+        });
+
+        if (updateResult.count === 0) {
+          const current = await tx.fuelTransaction.findUnique({
+            where: { id: txEntity.id },
+          });
+          if (!current) {
+            throw new FuelTransactionNotFoundError(txEntity.id);
+          }
+          if (eventType === 'FuelTransactionReceiptUpdated' && current.receiptStorageKey !== null) {
+            throw new EvidenceImmutableError(
+              'Fuel transaction already has an attached receipt. To replace receipt, void and recreate transaction.',
+            );
+          }
+          throw new ConcurrencyConflictError(
+            `Fuel transaction was modified by another operation. Expected version ${expectedVersion}, current version is ${current.version}`,
+          );
+        }
+      }
 
       // Anomalies
       if (anomalies.length > 0) {
@@ -498,6 +566,8 @@ export class PrismaFinanceRepository implements FinanceRepository {
     vehicleId: string,
     referenceNumber?: string | null,
     energyType?: PrismaFuelType,
+    currencyCode?: string,
+    quantityUnit?: PrismaFuelQuantityUnit,
     occurredAt = new Date(),
   ): Promise<HistoricalFuelContext> {
     const [previousTx, duplicateRef, duplicateTx, avgPriceGroup] = await Promise.all([
@@ -536,12 +606,14 @@ export class PrismaFinanceRepository implements FinanceRepository {
         },
         select: { id: true },
       }),
-      // Average unit price for energyType
-      energyType
+      // Average unit price scoped by energyType, currencyCode, and quantityUnit
+      energyType && currencyCode && quantityUnit
         ? this.db.fuelTransaction.aggregate({
             where: {
               organizationId,
               energyType,
+              currencyCode,
+              quantityUnit,
               status: { not: PrismaFuelTransactionStatus.VOIDED },
             },
             _avg: { unitPrice: true },
@@ -562,19 +634,22 @@ export class PrismaFinanceRepository implements FinanceRepository {
   // =========================================================================
 
   public async allocateExpenseDisplayId(organizationId: string): Promise<string> {
-    const existing = await this.db.expense.findMany({
-      where: { organizationId },
-      select: { displayId: true },
-    });
-    let maxNumber = 1000;
-    for (const e of existing) {
-      const match = /^EXP-(\d+)$/i.exec(e.displayId);
-      if (match && match[1]) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNumber) maxNumber = num;
+    return await this.db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('expense_tx:' || ${organizationId}))`;
+      const existing = await tx.expense.findMany({
+        where: { organizationId },
+        select: { displayId: true },
+      });
+      let maxNumber = 1000;
+      for (const e of existing) {
+        const match = /^EXP-(\d+)$/i.exec(e.displayId);
+        if (match && match[1]) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNumber) maxNumber = num;
+        }
       }
-    }
-    return `EXP-${maxNumber + 1}`;
+      return `EXP-${maxNumber + 1}`;
+    });
   }
 
   public async saveExpense(
@@ -599,62 +674,149 @@ export class PrismaFinanceRepository implements FinanceRepository {
               : 'expense.receipt.uploaded';
 
     await this.db.$transaction(async (tx) => {
-      await tx.expense.upsert({
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('expense_tx:' || ${expense.organizationId}))`;
+
+      const existingExpense = await tx.expense.findUnique({
         where: { id: expense.id },
-        create: {
-          id: expense.id,
-          organizationId: expense.organizationId,
-          displayId: expense.displayId,
-          categoryId: expense.categoryId,
-          vehicleId: expense.vehicleId,
-          driverId: expense.driverId,
-          tripId: expense.tripId,
-          maintenanceWorkOrderId: expense.maintenanceWorkOrderId,
-          occurredAt: expense.occurredAt,
-          description: expense.description,
-          amount: expense.amount,
-          currencyCode: expense.currencyCode,
-          vendorName: expense.vendorName,
-          referenceNumber: expense.referenceNumber,
-          status: expense.status as PrismaExpenseStatus,
-          voidReason: expense.voidReason,
-          voidedAt: expense.voidedAt,
-          voidedBy: expense.voidedBy,
-          receiptStorageKey: expense.receipt?.storageKey ?? null,
-          receiptFileName: expense.receipt?.fileName ?? null,
-          receiptContentType: expense.receipt?.contentType ?? null,
-          receiptSizeBytes: expense.receipt?.sizeBytes ?? null,
-          version: expense.version,
-          createdAt: expense.createdAt,
-          createdBy: expense.createdById,
-          updatedAt: expense.updatedAt,
-          updatedBy: expense.updatedBy,
-        },
-        update: {
-          categoryId: expense.categoryId,
-          vehicleId: expense.vehicleId,
-          driverId: expense.driverId,
-          tripId: expense.tripId,
-          maintenanceWorkOrderId: expense.maintenanceWorkOrderId,
-          occurredAt: expense.occurredAt,
-          description: expense.description,
-          amount: expense.amount,
-          currencyCode: expense.currencyCode,
-          vendorName: expense.vendorName,
-          referenceNumber: expense.referenceNumber,
-          status: expense.status as PrismaExpenseStatus,
-          voidReason: expense.voidReason,
-          voidedAt: expense.voidedAt,
-          voidedBy: expense.voidedBy,
-          receiptStorageKey: expense.receipt?.storageKey ?? null,
-          receiptFileName: expense.receipt?.fileName ?? null,
-          receiptContentType: expense.receipt?.contentType ?? null,
-          receiptSizeBytes: expense.receipt?.sizeBytes ?? null,
-          version: expense.version,
-          updatedAt: expense.updatedAt,
-          updatedBy: expense.updatedBy,
-        },
+        select: { id: true },
       });
+
+      if (!existingExpense) {
+        let displayId = expense.displayId;
+        const collision = await tx.expense.findFirst({
+          where: { organizationId: expense.organizationId, displayId },
+          select: { id: true },
+        });
+        if (collision) {
+          const existing = await tx.expense.findMany({
+            where: { organizationId: expense.organizationId },
+            select: { displayId: true },
+          });
+          let maxNumber = 1000;
+          for (const e of existing) {
+            const match = /^EXP-(\d+)$/i.exec(e.displayId);
+            if (match && match[1]) {
+              const num = parseInt(match[1], 10);
+              if (num > maxNumber) maxNumber = num;
+            }
+          }
+          displayId = `EXP-${maxNumber + 1}`;
+        }
+
+        await tx.expense.create({
+          data: {
+            id: expense.id,
+            organizationId: expense.organizationId,
+            displayId,
+            categoryId: expense.categoryId,
+            vehicleId: expense.vehicleId,
+            driverId: expense.driverId,
+            tripId: expense.tripId,
+            maintenanceWorkOrderId: expense.maintenanceWorkOrderId,
+            occurredAt: expense.occurredAt,
+            description: expense.description,
+            amount: expense.amount,
+            currencyCode: expense.currencyCode,
+            vendorName: expense.vendorName,
+            referenceNumber: expense.referenceNumber,
+            status: expense.status as PrismaExpenseStatus,
+            voidReason: expense.voidReason,
+            voidedAt: expense.voidedAt,
+            voidedBy: expense.voidedBy,
+            receiptStorageKey: expense.receipt?.storageKey ?? null,
+            receiptFileName: expense.receipt?.fileName ?? null,
+            receiptContentType: expense.receipt?.contentType ?? null,
+            receiptSizeBytes: expense.receipt?.sizeBytes ?? null,
+            version: expense.version,
+            createdAt: expense.createdAt,
+            createdBy: expense.createdById,
+            updatedAt: expense.updatedAt,
+            updatedBy: expense.updatedBy,
+          },
+        });
+      } else {
+        const expectedVersion = expense.version - 1;
+        if (eventType === 'ExpenseReceiptUpdated') {
+          const updateResult = await tx.expense.updateMany({
+            where: {
+              id: expense.id,
+              organizationId: expense.organizationId,
+              version: expectedVersion,
+              status: PrismaExpenseStatus.DRAFT,
+            },
+            data: {
+              receiptStorageKey: expense.receipt?.storageKey ?? null,
+              receiptFileName: expense.receipt?.fileName ?? null,
+              receiptContentType: expense.receipt?.contentType ?? null,
+              receiptSizeBytes: expense.receipt?.sizeBytes ?? null,
+              version: expense.version,
+              updatedAt: expense.updatedAt,
+              updatedBy: expense.updatedBy,
+            },
+          });
+
+          if (updateResult.count === 0) {
+            const current = await tx.expense.findUnique({
+              where: { id: expense.id },
+            });
+            if (!current) {
+              throw new ExpenseNotFoundError(expense.id);
+            }
+            if (current.status !== PrismaExpenseStatus.DRAFT) {
+              throw new EvidenceImmutableError(
+                'Expense receipt is immutable once posted or voided. Receipts can only be modified in DRAFT status.',
+              );
+            }
+            throw new ConcurrencyConflictError(
+              `Expense was modified by another operation. Expected version ${expectedVersion}, current version is ${current.version}`,
+            );
+          }
+        } else {
+          const updateResult = await tx.expense.updateMany({
+            where: {
+              id: expense.id,
+              organizationId: expense.organizationId,
+              version: expectedVersion,
+            },
+            data: {
+              categoryId: expense.categoryId,
+              vehicleId: expense.vehicleId,
+              driverId: expense.driverId,
+              tripId: expense.tripId,
+              maintenanceWorkOrderId: expense.maintenanceWorkOrderId,
+              occurredAt: expense.occurredAt,
+              description: expense.description,
+              amount: expense.amount,
+              currencyCode: expense.currencyCode,
+              vendorName: expense.vendorName,
+              referenceNumber: expense.referenceNumber,
+              status: expense.status as PrismaExpenseStatus,
+              voidReason: expense.voidReason,
+              voidedAt: expense.voidedAt,
+              voidedBy: expense.voidedBy,
+              receiptStorageKey: expense.receipt?.storageKey ?? null,
+              receiptFileName: expense.receipt?.fileName ?? null,
+              receiptContentType: expense.receipt?.contentType ?? null,
+              receiptSizeBytes: expense.receipt?.sizeBytes ?? null,
+              version: expense.version,
+              updatedAt: expense.updatedAt,
+              updatedBy: expense.updatedBy,
+            },
+          });
+
+          if (updateResult.count === 0) {
+            const current = await tx.expense.findUnique({
+              where: { id: expense.id },
+            });
+            if (!current) {
+              throw new ExpenseNotFoundError(expense.id);
+            }
+            throw new ConcurrencyConflictError(
+              `Expense was modified by another operation. Expected version ${expectedVersion}, current version is ${current.version}`,
+            );
+          }
+        }
+      }
 
       // Audit Log
       await tx.auditLog.create({
@@ -1265,9 +1427,9 @@ export class PrismaFinanceRepository implements FinanceRepository {
     const spendByCurrency: CurrencySpendSummary[] = Array.from(currencyMap.entries()).map(
       ([currencyCode, data]) => ({
         currencyCode,
-        fuelSpend: Math.round(data.fuel * 100) / 100,
-        expenseSpend: Math.round(data.expense * 100) / 100,
-        totalSpend: Math.round((data.fuel + data.expense) * 100) / 100,
+        fuelSpend: roundMoneyToCurrency(data.fuel, currencyCode).toNumber(),
+        expenseSpend: roundMoneyToCurrency(data.expense, currencyCode).toNumber(),
+        totalSpend: roundMoneyToCurrency(data.fuel + data.expense, currencyCode).toNumber(),
       }),
     );
 
@@ -1295,15 +1457,28 @@ export class PrismaFinanceRepository implements FinanceRepository {
     }
 
     const spendByCategory: CategorySpendSummary[] = Array.from(catMap.values())
-      .map((item) => ({
-        categoryId: item.cat.id,
-        categoryCode: item.cat.code,
-        categoryName: item.cat.name,
-        currencyCode: item.currency,
-        totalAmount: Math.round(item.total * 100) / 100,
-        expenseCount: item.count,
-      }))
-      .sort((a, b) => b.totalAmount - a.totalAmount);
+      .map((item) => {
+        const totalCurrencyExpense = currencyMap.get(item.currency)?.expense ?? 0;
+        const percentage =
+          totalCurrencyExpense > 0
+            ? Math.round((item.total / totalCurrencyExpense) * 10000) / 100
+            : 0;
+        return {
+          categoryId: item.cat.id,
+          categoryCode: item.cat.code,
+          categoryName: item.cat.name,
+          currencyCode: item.currency,
+          totalAmount: roundMoneyToCurrency(item.total, item.currency).toNumber(),
+          expenseCount: item.count,
+          percentage,
+        };
+      })
+      .sort((a, b) => {
+        if (a.currencyCode !== b.currencyCode) {
+          return a.currencyCode.localeCompare(b.currencyCode);
+        }
+        return b.totalAmount - a.totalAmount;
+      });
 
     // Top vehicles by spend
     const vehicleSpendMap = new Map<
@@ -1350,11 +1525,16 @@ export class PrismaFinanceRepository implements FinanceRepository {
         displayId: item.vehicle.displayId,
         registration: item.vehicle.registration,
         currencyCode: item.currencyCode,
-        fuelSpend: Math.round(item.fuel * 100) / 100,
-        expenseSpend: Math.round(item.expense * 100) / 100,
-        totalSpend: Math.round((item.fuel + item.expense) * 100) / 100,
+        fuelSpend: roundMoneyToCurrency(item.fuel, item.currencyCode).toNumber(),
+        expenseSpend: roundMoneyToCurrency(item.expense, item.currencyCode).toNumber(),
+        totalSpend: roundMoneyToCurrency(item.fuel + item.expense, item.currencyCode).toNumber(),
       }))
-      .sort((a, b) => b.totalSpend - a.totalSpend)
+      .sort((a, b) => {
+        if (a.currencyCode !== b.currencyCode) {
+          return a.currencyCode.localeCompare(b.currencyCode);
+        }
+        return b.totalSpend - a.totalSpend;
+      })
       .slice(0, 10);
 
     return {
@@ -1744,5 +1924,160 @@ export class PrismaFinanceRepository implements FinanceRepository {
       fuelTransactions,
       expenses,
     };
+  }
+
+  public async findFuelImportJobByChecksum(
+    organizationId: string,
+    checksum: string,
+  ): Promise<FuelImportJobDetail | null> {
+    const job = await this.db.fuelImportJob.findUnique({
+      where: {
+        organizationId_idempotencyChecksum: {
+          organizationId,
+          idempotencyChecksum: checksum,
+        },
+      },
+    });
+    if (!job) return null;
+    return {
+      id: job.id,
+      organizationId: job.organizationId,
+      fileName: job.fileName,
+      totalRows: job.totalRows,
+      importedRows: job.importedRows,
+      failedRows: job.failedRows,
+      status: job.status,
+      errorSummary: job.errorSummary,
+      idempotencyChecksum: job.idempotencyChecksum,
+      createdAt: job.createdAt,
+    };
+  }
+
+  public async createFuelImportJob(data: {
+    id: string;
+    organizationId: string;
+    fileName: string;
+    totalRows: number;
+    importedRows: number;
+    failedRows: number;
+    status: string;
+    errorSummary?: string | null;
+    idempotencyChecksum?: string | null;
+    createdById: string;
+  }): Promise<FuelImportJobDetail> {
+    const created = await this.db.fuelImportJob.create({
+      data: {
+        id: data.id,
+        organizationId: data.organizationId,
+        fileName: data.fileName,
+        totalRows: data.totalRows,
+        importedRows: data.importedRows,
+        failedRows: data.failedRows,
+        status: data.status as FuelImportStatus,
+        errorSummary: data.errorSummary ?? null,
+        idempotencyChecksum: data.idempotencyChecksum ?? null,
+        createdBy: data.createdById,
+      },
+    });
+    return {
+      id: created.id,
+      organizationId: created.organizationId,
+      fileName: created.fileName,
+      totalRows: created.totalRows,
+      importedRows: created.importedRows,
+      failedRows: created.failedRows,
+      status: created.status,
+      errorSummary: created.errorSummary,
+      idempotencyChecksum: created.idempotencyChecksum,
+      createdAt: created.createdAt,
+    };
+  }
+
+  public async updateFuelImportJob(
+    id: string,
+    data: {
+      importedRows: number;
+      failedRows: number;
+      status: string;
+      errorSummary?: string | null;
+    },
+  ): Promise<void> {
+    await this.db.fuelImportJob.update({
+      where: { id },
+      data: {
+        importedRows: data.importedRows,
+        failedRows: data.failedRows,
+        status: data.status as FuelImportStatus,
+        errorSummary: data.errorSummary ?? null,
+      },
+    });
+  }
+
+  public async listFuelTransactionsByBatchId(
+    organizationId: string,
+    batchId: string,
+  ): Promise<FuelTransactionDetail[]> {
+    const list = await this.db.fuelTransaction.findMany({
+      where: { organizationId, importBatchId: batchId },
+      include: {
+        vehicle: { select: { id: true, displayId: true, registration: true, model: true } },
+        driver: {
+          select: {
+            id: true,
+            displayId: true,
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+          },
+        },
+        trip: { select: { id: true, displayId: true, origin: true, destination: true } },
+        anomalies: true,
+      },
+      orderBy: { occurredAt: 'desc' },
+    });
+    return list.map((item) => ({
+      id: item.id,
+      organizationId: item.organizationId,
+      displayId: item.displayId,
+      vehicleId: item.vehicleId,
+      vehicle: item.vehicle,
+      driverId: item.driverId,
+      driver: item.driver,
+      tripId: item.tripId,
+      trip: item.trip,
+      occurredAt: item.occurredAt,
+      energyType: item.energyType,
+      quantity: item.quantity.toNumber(),
+      quantityUnit: item.quantityUnit,
+      unitPrice: item.unitPrice.toNumber(),
+      totalAmount: item.totalAmount.toNumber(),
+      currencyCode: item.currencyCode,
+      odometerKm: item.odometerKm,
+      stationName: item.stationName,
+      referenceNumber: item.referenceNumber,
+      source: item.source,
+      status: item.status,
+      voidReason: item.voidReason,
+      voidedAt: item.voidedAt,
+      voidedBy: item.voidedBy,
+      hasReceipt: !!item.receiptStorageKey,
+      receiptFileName: item.receiptFileName,
+      receiptContentType: item.receiptContentType,
+      receiptSizeBytes: item.receiptSizeBytes,
+      receiptStorageKey: item.receiptStorageKey,
+      version: item.version,
+      anomalies: item.anomalies.map((a) => ({
+        id: a.id,
+        code: a.code,
+        severity: a.severity,
+        description: a.description,
+        metadata: a.metadata as Record<string, unknown> | null,
+        createdAt: a.createdAt,
+      })),
+      createdAt: item.createdAt,
+      createdBy: item.createdBy,
+      updatedAt: item.updatedAt,
+      updatedBy: item.updatedBy,
+    }));
   }
 }

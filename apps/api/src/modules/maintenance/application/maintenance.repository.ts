@@ -28,6 +28,8 @@ export interface MaintenanceRequestDetail {
   readonly sourceType: MaintenanceRequestSource;
   readonly sourceInspectionId: string | null;
   readonly sourceInspectionDisplayId?: string | null;
+  readonly sourceIncidentId?: string | null;
+  readonly sourceIncidentDisplayId?: string | null;
   readonly title: string;
   readonly description: string | null;
   readonly priority: MaintenancePriority;
@@ -47,6 +49,7 @@ export interface CreateMaintenanceRequestInput {
   readonly vehicleId: string;
   readonly sourceType: MaintenanceRequestSource;
   readonly sourceInspectionId?: string | null | undefined;
+  readonly sourceIncidentId?: string | null | undefined;
   readonly title: string;
   readonly description?: string | null | undefined;
   readonly priority?: MaintenancePriority | undefined;
@@ -441,6 +444,10 @@ export interface MaintenanceRepository {
   findRequestById(id: string, organizationId: string): Promise<MaintenanceRequestDetail | null>;
   findRequestByInspection(
     inspectionId: string,
+    organizationId: string,
+  ): Promise<MaintenanceRequestDetail | null>;
+  findRequestByIncident(
+    incidentId: string,
     organizationId: string,
   ): Promise<MaintenanceRequestDetail | null>;
   listRequests(

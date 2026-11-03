@@ -10,6 +10,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -38,6 +39,7 @@ export class CreateFuelTransactionDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0.001)
+  @Max(999999999.999)
   quantity!: number;
 
   @IsOptional()
@@ -47,12 +49,14 @@ export class CreateFuelTransactionDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(99999999.9999)
   unitPrice!: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(9999999999.9999)
   totalAmount?: number;
 
   @IsString()
@@ -82,6 +86,11 @@ export class VoidFuelTransactionDto {
   @MinLength(3)
   @MaxLength(500)
   reason!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  version?: number;
 }
 
 export class ListFuelTransactionsQueryDto {
@@ -168,7 +177,8 @@ export class CreateExpenseDto {
 
   @Type(() => Number)
   @IsNumber()
-  @Min(0.01)
+  @Min(0.0001)
+  @Max(9999999999.9999)
   amount!: number;
 
   @IsString()
@@ -228,7 +238,8 @@ export class UpdateExpenseDraftDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0.01)
+  @Min(0.0001)
+  @Max(9999999999.9999)
   amount?: number;
 
   @IsOptional()
@@ -247,12 +258,24 @@ export class UpdateExpenseDraftDto {
   referenceNumber?: string | null;
 }
 
+export class PostExpenseDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  version?: number;
+}
+
 export class VoidExpenseDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(3)
   @MaxLength(500)
   reason!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  version?: number;
 }
 
 export class ListExpensesQueryDto {

@@ -4,12 +4,18 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { TenantHeader } from '../../../components/tenant-header';
-import { financeApi, type FuelTransactionRecord } from '../../../lib/api-client';
+import {
+  financeApi,
+  vehicleApi,
+  type CurrentUserResponse,
+  type FuelTransactionRecord,
+} from '../../../lib/api-client';
 
 export default function FuelTransactionDetailPage() {
   const params = useParams();
   const transactionId = params['id'] as string;
 
+  const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [transaction, setTransaction] = useState<FuelTransactionRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,8 +34,12 @@ export default function FuelTransactionDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await financeApi.fetchFuelTransaction(transactionId);
+      const [res, user] = await Promise.all([
+        financeApi.fetchFuelTransaction(transactionId),
+        vehicleApi.fetchCurrentUser().catch(() => null),
+      ]);
       setTransaction(res);
+      setCurrentUser(user);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load fuel transaction');
     } finally {
@@ -40,6 +50,9 @@ export default function FuelTransactionDetailPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  const canManage = Boolean(currentUser?.permissions.includes('fuel.manage'));
+  const canDownloadReceipt = Boolean(currentUser?.permissions.includes('finance.receipt.download'));
 
   const handleVoid = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +76,14 @@ export default function FuelTransactionDetailPage() {
   const handleDownloadReceipt = async () => {
     try {
       const res = await financeApi.getFuelReceiptUrl(transactionId);
-      window.open(res.downloadUrl, '_blank', 'noopener,noreferrer');
+      const downloadUrl = res.downloadUrl || (res as unknown as { url?: string }).url;
+      if (!downloadUrl) throw new Error('Download URL not returned');
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = res.fileName || transaction?.receiptFileName || 'receipt.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to get receipt download URL');
     }
@@ -170,7 +190,7 @@ export default function FuelTransactionDetailPage() {
               </p>
             </div>
 
-            {transaction.status === 'POSTED' && (
+            {transaction.status === 'POSTED' && canManage && (
               <button
                 type="button"
                 onClick={() => setShowVoidModal(true)}
@@ -425,39 +445,44 @@ export default function FuelTransactionDetailPage() {
                 }}
               >
                 <div>
-                  <p style={{ margin: 0, fontWeight: 500 }}>
+                  <p style={{ margin: 0, fontWeight: 500 }} data-testid="attached-receipt-name">
                     Attached file: {transaction.receiptFileName || 'receipt.pdf'}
                   </p>
-                  <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.75rem' }}>
+                  <p
+                    style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.75rem' }}
+                    data-testid="attached-receipt-meta"
+                  >
                     {transaction.receiptContentType} &bull;{' '}
                     {transaction.receiptFileSize
                       ? `${(transaction.receiptFileSize / 1024).toFixed(1)} KB`
                       : ''}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleDownloadReceipt}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: '#2563eb',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                  }}
-                  data-testid="btn-download-receipt"
-                >
-                  Download Signed Receipt &darr;
-                </button>
+                {canDownloadReceipt && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadReceipt}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: '#2563eb',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                    data-testid="btn-download-receipt"
+                  >
+                    Download Signed Receipt &darr;
+                  </button>
+                )}
               </div>
             ) : (
               <div>
                 <p style={{ color: '#6b7280', margin: '0 0 1rem 0', fontSize: '0.875rem' }}>
                   No receipt attached to this fuel transaction yet.
                 </p>
-                {transaction.status === 'POSTED' && (
+                {transaction.status === 'POSTED' && canManage && (
                   <form
                     onSubmit={handleUploadReceipt}
                     style={{

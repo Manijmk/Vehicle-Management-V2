@@ -3,6 +3,8 @@ import { ExpenseCategoryStatus, ExpenseStatus } from '@vms/database';
 import { ExpenseCategory } from './expense-category.js';
 import { Expense } from './expense.js';
 import {
+  ConcurrencyConflictError,
+  EvidenceImmutableError,
   ExpenseAlreadyPostedError,
   ExpenseAlreadyVoidedError,
   InvalidExpenseStateError,
@@ -162,6 +164,59 @@ describe('Expense & ExpenseCategory Domain Model', () => {
 
       expect(() => exp.voidExpense('Second void', 'user-1')).toThrow(ExpenseAlreadyVoidedError);
     });
+
+    it('enforces receipt immutability once POSTED (only DRAFT allows receipt changes)', () => {
+      const exp = Expense.create(baseParams);
+      // In DRAFT, can attach receipt
+      exp.attachReceipt(
+        {
+          storageKey: 'tenants/org-1/finance/expenses/rec.pdf',
+          fileName: 'rec.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 512,
+        },
+        'user-1',
+      );
+      expect(exp.receipt).not.toBeNull();
+
+      // Post the expense
+      exp.post('user-1');
+      expect(exp.status).toBe(ExpenseStatus.POSTED);
+
+      // Once POSTED, attaching or detaching receipt is rejected
+      expect(() =>
+        exp.attachReceipt(
+          {
+            storageKey: 'tenants/org-1/finance/expenses/new.pdf',
+            fileName: 'new.pdf',
+            contentType: 'application/pdf',
+            sizeBytes: 1024,
+          },
+          'user-1',
+        ),
+      ).toThrow(EvidenceImmutableError);
+
+      expect(() => exp.detachReceipt('user-1')).toThrow(EvidenceImmutableError);
+    });
+
+    it('enforces optimistic concurrency version on post and void', () => {
+      const exp = Expense.create(baseParams);
+      expect(exp.version).toBe(1);
+
+      // Mismatched expected version on post fails
+      expect(() => exp.post('user-1', 99)).toThrow(ConcurrencyConflictError);
+
+      // Valid expected version succeeds and increments
+      exp.post('user-1', 1);
+      expect(exp.version).toBe(2);
+
+      // Mismatched expected version on void fails
+      expect(() => exp.voidExpense('Void reason', 'user-1', 99)).toThrow(ConcurrencyConflictError);
+
+      // Valid expected version on void succeeds
+      exp.voidExpense('Void reason', 'user-1', 2);
+      expect(exp.version).toBe(3);
+      expect(exp.status).toBe(ExpenseStatus.VOIDED);
+    });
   });
 });
-

@@ -544,6 +544,62 @@ describe('Finance Module (Fuel & Expenses) Integration Tests', () => {
       expect(res.body.status).toBe('VOIDED');
       expect(res.body.voidReason).toBe('Test void due to bad odometer regression entry');
     });
+
+    it('rejects fictitious currency code like ZZZ with 400 INVALID_CURRENCY_CODE', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          vehicleId: ids.vehicleA,
+          occurredAt: '2026-05-10T10:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 20,
+          unitPrice: 1.5,
+          currencyCode: 'ZZZ',
+        })
+        .expect(400);
+
+      expect(res.body.error.code).toBe('INVALID_CURRENCY_CODE');
+    });
+
+    it('rejects provided total amount that does not match quantity * unitPrice', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          vehicleId: ids.vehicleA,
+          occurredAt: '2026-05-10T10:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 20,
+          unitPrice: 1.5,
+          totalAmount: 99.99,
+          currencyCode: 'USD',
+        })
+        .expect(409);
+
+      expect(res.body.error.code).toBe('INVALID_FUEL_TRANSACTION_STATE');
+    });
+
+    it('rejects fuel transaction when vehicleId does not match trip vehicleId', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          tripId: ids.tripA,
+          vehicleId: '00000000-0000-0000-0000-000000000000',
+          occurredAt: '2026-05-10T10:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 20,
+          unitPrice: 1.5,
+          currencyCode: 'USD',
+        })
+        .expect(400);
+
+      expect(res.body.error.code).toBe('TRIP_VEHICLE_MISMATCH');
+    });
   });
 
   describe('4. CSV Fuel Import Preview & Confirmation', () => {
@@ -698,6 +754,23 @@ describe('Finance Module (Fuel & Expenses) Integration Tests', () => {
       expect(res.body.status).toBe('VOIDED');
       expect(res.body.voidReason).toBe('Double-entry reimbursement claimed by driver');
     });
+
+    it('rejects fictitious currency code like ABC on expense create with 400 INVALID_CURRENCY_CODE', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/expenses')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          categoryId: activeCategoryId,
+          occurredAt: '2026-05-11T12:00:00.000Z',
+          description: 'Invalid currency test',
+          amount: 50.0,
+          currencyCode: 'ABC',
+        })
+        .expect(400);
+
+      expect(res.body.error.code).toBe('INVALID_CURRENCY_CODE');
+    });
   });
 
   describe('6. Multi-Tenant Isolation', () => {
@@ -784,6 +857,515 @@ describe('Finance Module (Fuel & Expenses) Integration Tests', () => {
       expect(res.body.tripId).toBe(ids.tripA);
       expect(res.body.spendByCurrency).toBeInstanceOf(Array);
       expect(res.body.fuelTransactions).toBeInstanceOf(Array);
+    });
+  });
+
+  describe('8. Financial Integrity, Concurrency, and Idempotency Release Gates', () => {
+    it('enforces multi-currency decimal rules and strict total amount calculation without tolerance', async () => {
+      // 1. JPY (0 fraction digits)
+      const resJpy = await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          vehicleId: ids.vehicleA,
+          occurredAt: '2026-05-15T09:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 20,
+          unitPrice: 165,
+          currencyCode: 'JPY',
+          stationName: 'Tokyo Port Depot',
+        })
+        .expect(201);
+
+      expect(resJpy.body.currencyCode).toBe('JPY');
+      expect(resJpy.body.totalAmount).toBe(3300);
+
+      // 2. KWD (3 fraction digits)
+      const resKwd = await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          vehicleId: ids.vehicleA,
+          occurredAt: '2026-05-15T10:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 10,
+          unitPrice: 0.455,
+          currencyCode: 'KWD',
+          stationName: 'Kuwait City Hub',
+        })
+        .expect(201);
+
+      expect(resKwd.body.currencyCode).toBe('KWD');
+      expect(resKwd.body.totalAmount).toBe(4.55);
+
+      // 3. Strict total matching: client sends mismatched totalAmount differing by 0.05
+      await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          vehicleId: ids.vehicleA,
+          occurredAt: '2026-05-15T11:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 50,
+          unitPrice: 1.5,
+          totalAmount: 75.05, // Mismatched! Expected 75.00
+          currencyCode: 'USD',
+        })
+        .expect(409);
+    });
+
+    it('enforces participant attribution consistency and rejects conflicting trip or work order associations', async () => {
+      // 1. Conflicting vehicleId with tripA (which belongs to vehicleA)
+      await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          tripId: ids.tripA,
+          vehicleId: ids.vehicleB, // Conflict!
+          occurredAt: '2026-05-16T10:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 30,
+          unitPrice: 1.5,
+          currencyCode: 'USD',
+        })
+        .expect(400);
+
+      // 2. Conflicting driverId with tripA (which belongs to driverA)
+      await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          tripId: ids.tripA,
+          driverId: ids.driverB, // Conflict!
+          occurredAt: '2026-05-16T10:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 30,
+          unitPrice: 1.5,
+          currencyCode: 'USD',
+        })
+        .expect(400);
+
+      // 3. Conflicting vehicleId with workOrderA (which belongs to vehicleA)
+      const cat = await database.expenseCategory.findFirst({
+        where: { organizationId: ids.organizationA, status: 'ACTIVE' },
+      });
+      await request(app.getHttpServer())
+        .post('/api/v1/expenses')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          categoryId: cat!.id,
+          maintenanceWorkOrderId: ids.workOrderA,
+          vehicleId: ids.vehicleB, // Conflict!
+          occurredAt: '2026-05-16T11:00:00.000Z',
+          description: 'Mismatched vehicle brake work',
+          amount: 100,
+          currencyCode: 'USD',
+        })
+        .expect(400);
+    });
+
+    it('enforces optimistic concurrency control on voids and status transitions', async () => {
+      // 1. Fuel transaction concurrency conflict on void
+      const fuelRes = await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          vehicleId: ids.vehicleA,
+          occurredAt: '2026-05-17T09:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 25,
+          unitPrice: 1.5,
+          currencyCode: 'USD',
+        })
+        .expect(201);
+
+      expect(fuelRes.body.version).toBe(1);
+
+      // Stale void attempt with version 0
+      await request(app.getHttpServer())
+        .post(`/api/v1/fuel/${fuelRes.body.id}/void`)
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          reason: 'Test void with stale version',
+          version: 0, // Stale! Current is 1
+        })
+        .expect(409);
+
+      // Successful void with correct version
+      await request(app.getHttpServer())
+        .post(`/api/v1/fuel/${fuelRes.body.id}/void`)
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          reason: 'Test void with correct version',
+          version: 1,
+        })
+        .expect(200);
+
+      // 2. Expense concurrency conflict on post and void
+      const cat = await database.expenseCategory.findFirst({
+        where: { organizationId: ids.organizationA, status: 'ACTIVE' },
+      });
+      const expRes = await request(app.getHttpServer())
+        .post('/api/v1/expenses')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          categoryId: cat!.id,
+          occurredAt: '2026-05-17T10:00:00.000Z',
+          description: 'Concurrency test expense',
+          amount: 80,
+          currencyCode: 'USD',
+          status: 'DRAFT',
+        })
+        .expect(201);
+
+      expect(expRes.body.version).toBe(1);
+
+      // Stale post attempt with version 0
+      await request(app.getHttpServer())
+        .post(`/api/v1/expenses/${expRes.body.id}/post`)
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({ version: 0 })
+        .expect(409);
+
+      // Successful post with correct version
+      const postedRes = await request(app.getHttpServer())
+        .post(`/api/v1/expenses/${expRes.body.id}/post`)
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({ version: 1 })
+        .expect(200);
+
+      expect(postedRes.body.version).toBe(2);
+
+      // Stale void attempt with version 1
+      await request(app.getHttpServer())
+        .post(`/api/v1/expenses/${expRes.body.id}/void`)
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          reason: 'Stale void attempt',
+          version: 1, // Stale! Current is 2
+        })
+        .expect(409);
+
+      // Successful void with correct version
+      await request(app.getHttpServer())
+        .post(`/api/v1/expenses/${expRes.body.id}/void`)
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          reason: 'Void with correct version',
+          version: 2,
+        })
+        .expect(200);
+    });
+
+    it('enforces receipt evidence immutability for fuel transactions and posted expenses', async () => {
+      // 1. Fuel receipt immutability: create transaction, attach receipt, try attaching again
+      const fuelRes = await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          vehicleId: ids.vehicleA,
+          occurredAt: '2026-05-18T09:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 20,
+          unitPrice: 1.5,
+          currencyCode: 'USD',
+        })
+        .expect(201);
+
+      // First receipt attachment succeeds
+      await request(app.getHttpServer())
+        .post(`/api/v1/fuel/${fuelRes.body.id}/receipt`)
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .attach('file', sampleReceiptPdf, 'first_receipt.pdf')
+        .expect(200);
+
+      // Second receipt attachment throws 409 EVIDENCE_IMMUTABLE
+      await request(app.getHttpServer())
+        .post(`/api/v1/fuel/${fuelRes.body.id}/receipt`)
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .attach('file', sampleReceiptPdf, 'second_receipt.pdf')
+        .expect(409);
+
+      // 2. Expense receipt immutability: create directly posted expense, try attaching receipt
+      const cat = await database.expenseCategory.findFirst({
+        where: { organizationId: ids.organizationA, status: 'ACTIVE' },
+      });
+      const expRes = await request(app.getHttpServer())
+        .post('/api/v1/expenses')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          categoryId: cat!.id,
+          occurredAt: '2026-05-18T10:00:00.000Z',
+          description: 'Directly posted expense',
+          amount: 95,
+          currencyCode: 'USD',
+          status: 'POSTED',
+        })
+        .expect(201);
+
+      // Attachment on POSTED expense throws 409 EVIDENCE_IMMUTABLE
+      await request(app.getHttpServer())
+        .post(`/api/v1/expenses/${expRes.body.id}/receipt`)
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .attach('file', sampleReceiptPdf, 'expense_receipt.pdf')
+        .expect(409);
+    });
+
+    it('enforces CSV fuel import idempotency without duplicate transactions', async () => {
+      const uniqueRef = `IDEMP-${Date.now()}`;
+      const csvData = `date,registration,energy_type,quantity,unit,unit_price,total_amount,currency,odometer,station,reference_number,driver_number
+2026-05-19,FIN-100,DIESEL,30,LITER,1.50,45.00,USD,14000,Idempotent Station,${uniqueRef},EMP-9001`;
+
+      const countBefore = await database.fuelTransaction.count({
+        where: { organizationId: ids.organizationA },
+      });
+
+      // First confirm
+      const res1 = await request(app.getHttpServer())
+        .post('/api/v1/fuel/import-confirm')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({ csvContent: csvData })
+        .expect(200);
+
+      expect(res1.body.importedCount).toBe(1);
+
+      const countAfterFirst = await database.fuelTransaction.count({
+        where: { organizationId: ids.organizationA },
+      });
+      expect(countAfterFirst).toBe(countBefore + 1);
+
+      // Second confirm with identical CSV data
+      const res2 = await request(app.getHttpServer())
+        .post('/api/v1/fuel/import-confirm')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({ csvContent: csvData })
+        .expect(200);
+
+      expect(res2.body.importedCount).toBe(1);
+
+      // Total count in database must not have increased!
+      const countAfterSecond = await database.fuelTransaction.count({
+        where: { organizationId: ids.organizationA },
+      });
+      expect(countAfterSecond).toBe(countAfterFirst);
+    });
+
+    it('prevents race conditions and duplicate display IDs under concurrent creation', async () => {
+      const concurrentCreations = await Promise.all(
+        Array.from({ length: 5 }).map((_, i) =>
+          request(app.getHttpServer())
+            .post('/api/v1/fuel')
+            .set('Authorization', `Bearer ${adminTokenA}`)
+            .set('x-organization-id', ids.organizationA)
+            .send({
+              vehicleId: ids.vehicleA,
+              occurredAt: new Date(Date.now() + i * 1000).toISOString(),
+              energyType: 'DIESEL',
+              quantity: 10 + i,
+              unitPrice: 1.5,
+              currencyCode: 'USD',
+              stationName: `Concurrent Station ${i}`,
+            }),
+        ),
+      );
+
+      for (const res of concurrentCreations) {
+        expect(res.status).toBe(201);
+        expect(res.body.displayId).toMatch(/^FUEL-\d+$/);
+      }
+
+      const displayIds = concurrentCreations.map((r) => r.body.displayId);
+      const uniqueIds = new Set(displayIds);
+      expect(uniqueIds.size).toBe(5);
+    });
+
+    it('guarantees fuel transactions never mutate vehicle authoritative odometer', async () => {
+      const vehBefore = await database.vehicle.findUniqueOrThrow({
+        where: { id: ids.vehicleA },
+      });
+
+      await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          vehicleId: ids.vehicleA,
+          occurredAt: '2026-05-20T12:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 20,
+          unitPrice: 1.5,
+          currencyCode: 'USD',
+          odometerKm: 999999, // Wildly high odometer reading
+        })
+        .expect(201);
+
+      const vehAfter = await database.vehicle.findUniqueOrThrow({
+        where: { id: ids.vehicleA },
+      });
+
+      expect(vehAfter.odometerKm).toBe(vehBefore.odometerKm);
+    });
+
+    it('enforces receipt download authorization and cross-tenant isolation', async () => {
+      // Find fuel transaction with receipt
+      const fuelWithReceipt = await database.fuelTransaction.findFirstOrThrow({
+        where: { organizationId: ids.organizationA, receiptStorageKey: { not: null } },
+      });
+
+      // 1. Viewer token (lacks finance.receipt.download) returns 403
+      await request(app.getHttpServer())
+        .get(`/api/v1/fuel/${fuelWithReceipt.id}/receipt-url`)
+        .set('Authorization', `Bearer ${viewerTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .expect(403);
+
+      // 2. Org B admin requesting Org A receipt URL returns 404
+      await request(app.getHttpServer())
+        .get(`/api/v1/fuel/${fuelWithReceipt.id}/receipt-url`)
+        .set('Authorization', `Bearer ${adminTokenB}`)
+        .set('x-organization-id', ids.organizationB)
+        .expect(404);
+
+      // 3. Expense receipt authorization and tenant isolation
+      const cat = await database.expenseCategory.findFirstOrThrow({
+        where: { organizationId: ids.organizationA, status: 'ACTIVE' },
+      });
+      const draftRes = await request(app.getHttpServer())
+        .post('/api/v1/expenses')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          categoryId: cat.id,
+          occurredAt: '2026-05-18T10:00:00.000Z',
+          description: 'Receipt auth test draft expense',
+          amount: 50,
+          currencyCode: 'USD',
+          status: 'DRAFT',
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/expenses/${draftRes.body.id}/receipt`)
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .attach('file', sampleReceiptPdf, 'expense_receipt.pdf')
+        .expect(200);
+
+      // Viewer lacks permission -> 403
+      await request(app.getHttpServer())
+        .get(`/api/v1/expenses/${draftRes.body.id}/receipt-url`)
+        .set('Authorization', `Bearer ${viewerTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .expect(403);
+
+      // Org B actor -> 404
+      await request(app.getHttpServer())
+        .get(`/api/v1/expenses/${draftRes.body.id}/receipt-url`)
+        .set('Authorization', `Bearer ${adminTokenB}`)
+        .set('x-organization-id', ids.organizationB)
+        .expect(404);
+    });
+
+    it('preserves exact boundary values losslessly across KWD, JPY, and USD via REST API', async () => {
+      // 1. KWD fuel transaction: 3 decimal places (10.000 L * 0.125 KWD/L = 1.250 KWD)
+      const kwdFuel = await request(app.getHttpServer())
+        .post('/api/v1/fuel')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          vehicleId: ids.vehicleA,
+          occurredAt: '2026-05-19T10:00:00.000Z',
+          energyType: 'DIESEL',
+          quantity: 10.0,
+          unitPrice: 0.125,
+          totalAmount: 1.25,
+          currencyCode: 'KWD',
+        })
+        .expect(201);
+
+      expect(kwdFuel.body.currencyCode).toBe('KWD');
+      expect(kwdFuel.body.totalAmount).toBe(1.25);
+      expect(kwdFuel.body.unitPrice).toBe(0.125);
+
+      // 2. JPY smallest subunit (¥1) expense
+      const cat = await database.expenseCategory.findFirstOrThrow({
+        where: { organizationId: ids.organizationA, status: 'ACTIVE' },
+      });
+      const jpyExpense = await request(app.getHttpServer())
+        .post('/api/v1/expenses')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .send({
+          categoryId: cat.id,
+          occurredAt: '2026-05-19T11:00:00.000Z',
+          description: 'Single Yen subunit bridge fee',
+          amount: 1,
+          currencyCode: 'JPY',
+          status: 'POSTED',
+        })
+        .expect(201);
+
+      expect(jpyExpense.body.currencyCode).toBe('JPY');
+      expect(jpyExpense.body.amount).toBe(1);
+    });
+
+    it('produces currency-segregated financial summaries with zero FX conversion', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/finance/summary')
+        .set('Authorization', `Bearer ${adminTokenA}`)
+        .set('x-organization-id', ids.organizationA)
+        .expect(200);
+
+      // Must have separate spend summaries for USD and JPY
+      const currencies = res.body.spendByCurrency.map(
+        (s: { currencyCode: string }) => s.currencyCode,
+      );
+      expect(currencies).toContain('USD');
+      expect(currencies).toContain('JPY');
+
+      // Zero FX conversion check: each currency card has distinct positive totals
+      const usdSpend = res.body.spendByCurrency.find(
+        (s: { currencyCode: string }) => s.currencyCode === 'USD',
+      );
+      const jpySpend = res.body.spendByCurrency.find(
+        (s: { currencyCode: string }) => s.currencyCode === 'JPY',
+      );
+      expect(usdSpend.totalSpend).toBeGreaterThan(0);
+      expect(jpySpend.totalSpend).toBeGreaterThan(0);
+
+      // Categories percentages are calculated within currency
+      for (const cat of res.body.spendByCategory) {
+        expect(cat.currencyCode).toBeDefined();
+        expect(cat.percentage).toBeGreaterThanOrEqual(0);
+        expect(cat.percentage).toBeLessThanOrEqual(100);
+      }
+
+      // Top vehicles are ranked strictly per currency
+      for (const veh of res.body.topVehiclesBySpend) {
+        expect(veh.currencyCode).toBeDefined();
+        expect(veh.totalSpend).toBeGreaterThan(0);
+      }
     });
   });
 });

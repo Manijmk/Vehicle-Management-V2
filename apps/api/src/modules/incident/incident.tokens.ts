@@ -1,0 +1,2 @@
+export const INCIDENT_REPOSITORY = Symbol('INCIDENT_REPOSITORY');
+export const INCIDENT_SERVICE = Symbol('INCIDENT_SERVICE');
