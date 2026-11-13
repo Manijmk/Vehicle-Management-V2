@@ -19,6 +19,7 @@ import {
 } from './notifications/notification-delivery.service.js';
 import { NotificationRuleEvaluatorService } from './notifications/notification-rule-evaluator.service.js';
 import { ComplianceExpirySchedulerService } from './notifications/compliance-expiry-scheduler.service.js';
+import { WebhookDeliveryProcessorService } from './integrations/webhook-delivery-processor.service.js';
 
 @Module({
   providers: [
@@ -45,11 +46,13 @@ import { ComplianceExpirySchedulerService } from './notifications/compliance-exp
     NotificationDeliveryService,
     NotificationRuleEvaluatorService,
     ComplianceExpirySchedulerService,
+    WebhookDeliveryProcessorService,
   ],
   exports: [
     NotificationDeliveryService,
     NotificationRuleEvaluatorService,
     ComplianceExpirySchedulerService,
+    WebhookDeliveryProcessorService,
   ],
 })
 export class WorkerModule {}

@@ -603,6 +603,10 @@ describe('Trip Vertical Slice E2E', () => {
           startOdometerKm: 1000,
         });
 
+      if (res.status !== 200) {
+        console.error('TRIP START 409 ERROR BODY:', JSON.stringify(res.body, null, 2));
+      }
+
       expect(res.status).toBe(200);
       trip = res.body;
       expect(trip.status).toBe('IN_PROGRESS');

@@ -50,9 +50,12 @@ describe('Telemetry Domain Logic', () => {
 
     it('rejects non-numeric, NaN, or non-finite coordinates', () => {
       expect(() => assertValidCoordinates(Number.NaN, 0)).toThrow(InvalidTelemetryCoordinatesError);
-      expect(() => assertValidCoordinates(0, Number.POSITIVE_INFINITY)).toThrow(InvalidTelemetryCoordinatesError);
-      // @ts-expect-error test non-number
-      expect(() => assertValidCoordinates('37' as unknown as number, 10)).toThrow(InvalidTelemetryCoordinatesError);
+      expect(() => assertValidCoordinates(0, Number.POSITIVE_INFINITY)).toThrow(
+        InvalidTelemetryCoordinatesError,
+      );
+      expect(() => assertValidCoordinates('37' as unknown as number, 10)).toThrow(
+        InvalidTelemetryCoordinatesError,
+      );
     });
   });
 
@@ -113,19 +116,25 @@ describe('Telemetry Domain Logic', () => {
     it('rejects timestamp more than 5 minutes in the future', () => {
       const receivedAt = new Date('2026-06-01T12:00:00Z');
       const capturedAt = new Date('2026-06-01T12:05:01Z'); // 5 min 1 sec in future
-      expect(() => assertValidCapturedAt(capturedAt, receivedAt)).toThrow(InvalidTelemetryTimestampError);
+      expect(() => assertValidCapturedAt(capturedAt, receivedAt)).toThrow(
+        InvalidTelemetryTimestampError,
+      );
     });
 
     it('rejects timestamp more than 365 days in the past', () => {
       const receivedAt = new Date('2026-06-01T12:00:00Z');
       const capturedAt = new Date('2025-05-31T11:59:00Z'); // 366 days in past
-      expect(() => assertValidCapturedAt(capturedAt, receivedAt)).toThrow(InvalidTelemetryTimestampError);
+      expect(() => assertValidCapturedAt(capturedAt, receivedAt)).toThrow(
+        InvalidTelemetryTimestampError,
+      );
     });
 
     it('rejects invalid Date objects', () => {
       const receivedAt = new Date('2026-06-01T12:00:00Z');
       const invalidDate = new Date('invalid');
-      expect(() => assertValidCapturedAt(invalidDate, receivedAt)).toThrow(InvalidTelemetryTimestampError);
+      expect(() => assertValidCapturedAt(invalidDate, receivedAt)).toThrow(
+        InvalidTelemetryTimestampError,
+      );
     });
   });
 
@@ -158,18 +167,35 @@ describe('Telemetry Domain Logic', () => {
 
   describe('Device Domain Logic', () => {
     it('allows valid device status transitions', () => {
-      expect(canTransitionDeviceStatus(TelemetryDeviceStatus.ACTIVE, TelemetryDeviceStatus.INACTIVE)).toBe(true);
-      expect(canTransitionDeviceStatus(TelemetryDeviceStatus.ACTIVE, TelemetryDeviceStatus.SUSPENDED)).toBe(true);
-      expect(canTransitionDeviceStatus(TelemetryDeviceStatus.INACTIVE, TelemetryDeviceStatus.ACTIVE)).toBe(true);
-      expect(canTransitionDeviceStatus(TelemetryDeviceStatus.SUSPENDED, TelemetryDeviceStatus.ACTIVE)).toBe(true);
-      expect(canTransitionDeviceStatus(TelemetryDeviceStatus.SUSPENDED, TelemetryDeviceStatus.INACTIVE)).toBe(true);
+      expect(
+        canTransitionDeviceStatus(TelemetryDeviceStatus.ACTIVE, TelemetryDeviceStatus.INACTIVE),
+      ).toBe(true);
+      expect(
+        canTransitionDeviceStatus(TelemetryDeviceStatus.ACTIVE, TelemetryDeviceStatus.SUSPENDED),
+      ).toBe(true);
+      expect(
+        canTransitionDeviceStatus(TelemetryDeviceStatus.INACTIVE, TelemetryDeviceStatus.ACTIVE),
+      ).toBe(true);
+      expect(
+        canTransitionDeviceStatus(TelemetryDeviceStatus.SUSPENDED, TelemetryDeviceStatus.ACTIVE),
+      ).toBe(true);
+      expect(
+        canTransitionDeviceStatus(TelemetryDeviceStatus.SUSPENDED, TelemetryDeviceStatus.INACTIVE),
+      ).toBe(true);
     });
 
     it('rejects invalid device status transitions', () => {
-      expect(canTransitionDeviceStatus(TelemetryDeviceStatus.INACTIVE, TelemetryDeviceStatus.SUSPENDED)).toBe(false);
-      expect(canTransitionDeviceStatus(TelemetryDeviceStatus.ACTIVE, TelemetryDeviceStatus.ACTIVE)).toBe(false);
+      expect(
+        canTransitionDeviceStatus(TelemetryDeviceStatus.INACTIVE, TelemetryDeviceStatus.SUSPENDED),
+      ).toBe(false);
+      expect(
+        canTransitionDeviceStatus(TelemetryDeviceStatus.ACTIVE, TelemetryDeviceStatus.ACTIVE),
+      ).toBe(false);
       expect(() =>
-        assertValidDeviceStatusTransition(TelemetryDeviceStatus.INACTIVE, TelemetryDeviceStatus.SUSPENDED),
+        assertValidDeviceStatusTransition(
+          TelemetryDeviceStatus.INACTIVE,
+          TelemetryDeviceStatus.SUSPENDED,
+        ),
       ).toThrow(InvalidDeviceStatusTransitionError);
     });
 

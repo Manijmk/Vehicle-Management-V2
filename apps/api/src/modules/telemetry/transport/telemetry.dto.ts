@@ -37,7 +37,10 @@ export class CreateDeviceDto {
   @MaxLength(100)
   identifier!: string;
 
-  @ApiPropertyOptional({ description: 'Optional device notes', example: 'Installed under dashboard' })
+  @ApiPropertyOptional({
+    description: 'Optional device notes',
+    example: 'Installed under dashboard',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -90,9 +93,17 @@ export class UnassignDeviceDto {
 }
 
 export class IngestPositionDto {
-  @ApiProperty({ description: 'Device ID' })
+  @ApiPropertyOptional({ description: 'Device ID (optional for deviceless human ingestion)' })
+  @IsOptional()
   @IsUUID()
-  deviceId!: string;
+  deviceId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Target vehicle ID (required if deviceId is not supplied)',
+  })
+  @IsOptional()
+  @IsUUID()
+  vehicleId?: string;
 
   @ApiProperty({ description: 'Captured at ISO8601 timestamp' })
   @IsDateString()
@@ -193,4 +204,72 @@ export class HistoryQueryDto {
   @IsOptional()
   @IsUUID()
   cursor?: string;
+}
+
+export class DeviceIngestPositionDto {
+  @ApiProperty({ description: 'Captured at ISO8601 timestamp' })
+  @IsDateString()
+  capturedAt!: string;
+
+  @ApiProperty({ description: 'Latitude between -90 and 90', example: 37.7749 })
+  @IsNumber()
+  latitude!: number;
+
+  @ApiProperty({ description: 'Longitude between -180 and 180', example: -122.4194 })
+  @IsNumber()
+  longitude!: number;
+
+  @ApiPropertyOptional({ description: 'Speed in km/h (0..300)', example: 65.5 })
+  @IsOptional()
+  @IsNumber()
+  speedKmh?: number;
+
+  @ApiPropertyOptional({ description: 'Heading in degrees (0..360)', example: 180 })
+  @IsOptional()
+  @IsNumber()
+  heading?: number;
+
+  @ApiPropertyOptional({ description: 'Altitude in meters', example: 15.2 })
+  @IsOptional()
+  @IsNumber()
+  altitudeM?: number;
+
+  @ApiPropertyOptional({ description: 'Accuracy in meters', example: 3.5 })
+  @IsOptional()
+  @IsNumber()
+  accuracyM?: number;
+
+  @ApiPropertyOptional({ description: 'Ignition state', example: true })
+  @IsOptional()
+  @IsBoolean()
+  ignition?: boolean;
+
+  @ApiPropertyOptional({ description: 'Odometer reading in km', example: 12500 })
+  @IsOptional()
+  @IsInt()
+  odometerKm?: number;
+
+  @ApiPropertyOptional({ description: 'Provider message ID for idempotency deduplication' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  providerMessageId?: string;
+
+  @ApiPropertyOptional({ description: 'Optional raw metadata payload' })
+  @IsOptional()
+  @IsObject()
+  rawMetadata?: Record<string, unknown>;
+}
+
+export class DeviceBatchIngestDto {
+  @ApiProperty({
+    description: 'List of telemetry positions to ingest for this authenticated device (1..100)',
+    type: [DeviceIngestPositionDto],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => DeviceIngestPositionDto)
+  positions!: DeviceIngestPositionDto[];
 }

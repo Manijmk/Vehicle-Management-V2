@@ -61,6 +61,12 @@ export {
   TelemetrySource,
   TelemetryPositionStatus,
   TelemetryDeviceStatus,
+  TelemetryDeviceCredentialStatus,
+  IntegrationKind,
+  IntegrationStatus,
+  WebhookDeliveryStatus,
+  IntegrationMappingStatus,
+  FuelCardImportBatchStatus,
 } from './generated/client.js';
 
 export type {
@@ -75,7 +81,18 @@ export type {
   NotificationTemplate,
   AutomationDeduplication,
   TelemetryDevice,
+  TelemetryDeviceCredential,
   TelemetryDeviceVehicleAssignment,
   TelemetryPosition,
   TelemetryCurrentPosition,
+  IntegrationConnection,
+  IntegrationSecret,
+  WebhookSubscription,
+  WebhookDelivery,
+  WebhookDeliveryAttempt,
+  InboundIntegrationReceipt,
+  IntegrationDeviceMapping,
+  FuelCardImportBatch,
+  ExternalTransactionIdentity,
+  AccountingExportLog,
 } from './generated/client.js';

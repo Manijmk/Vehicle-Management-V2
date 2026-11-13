@@ -75,8 +75,11 @@ export class ApiExceptionFilter implements ExceptionFilter {
   private applicationStatus(code: ApplicationError['code']): number {
     switch (code) {
       case 'UNAUTHENTICATED':
+      case 'TELEMETRY_CREDENTIAL_INVALID':
+      case 'INBOUND_TELEMATICS_SIGNATURE_INVALID':
         return HttpStatus.UNAUTHORIZED;
       case 'PERMISSION_DENIED':
+      case 'REPORT_PERMISSION_DENIED':
       case 'INVALID_TENANT_CONTEXT':
       case 'INACTIVE_MEMBERSHIP':
         return HttpStatus.FORBIDDEN;
@@ -111,6 +114,14 @@ export class ApiExceptionFilter implements ExceptionFilter {
       case 'NOTIFICATION_TEMPLATE_NOT_FOUND':
       case 'TELEMETRY_DEVICE_NOT_FOUND':
       case 'TELEMETRY_POSITION_NOT_FOUND':
+      case 'TELEMETRY_CREDENTIAL_NOT_FOUND':
+      case 'REPORT_NOT_FOUND':
+      case 'INTEGRATION_CONNECTION_NOT_FOUND':
+      case 'INTEGRATION_SECRET_NOT_FOUND':
+      case 'WEBHOOK_SUBSCRIPTION_NOT_FOUND':
+      case 'WEBHOOK_DELIVERY_NOT_FOUND':
+      case 'INTEGRATION_MAPPING_NOT_FOUND':
+      case 'FUEL_CARD_IMPORT_BATCH_NOT_FOUND':
         return HttpStatus.NOT_FOUND;
       case 'INVALID_LICENSE_DATE_RANGE':
       case 'INVALID_DRIVER_DATA':
@@ -163,6 +174,19 @@ export class ApiExceptionFilter implements ExceptionFilter {
       case 'INVALID_TELEMETRY_TIMESTAMP':
       case 'INVALID_DEVICE_DATA':
       case 'TELEMETRY_BATCH_INVALID':
+      case 'TELEMETRY_SOURCE_UNSUPPORTED':
+      case 'REPORT_INVALID_DATE_RANGE':
+      case 'REPORT_RANGE_TOO_LARGE':
+      case 'REPORT_UNSUPPORTED_FORMAT':
+      case 'REPORT_EXPORT_TOO_LARGE':
+      case 'INTEGRATION_INVALID_STATE':
+      case 'INTEGRATION_SECRET_INVALID':
+      case 'INVALID_WEBHOOK_URL':
+      case 'INVALID_WEBHOOK_EVENT_TYPES':
+      case 'WEBHOOK_DELIVERY_NOT_RETRYABLE':
+      case 'INBOUND_TELEMATICS_TIMESTAMP_EXPIRED':
+      case 'INBOUND_TELEMATICS_PAYLOAD_INVALID':
+      case 'FUEL_CARD_IMPORT_PARSING_ERROR':
       case 'VALIDATION_ERROR':
         return HttpStatus.BAD_REQUEST;
       case 'MEMBERSHIP_ALREADY_EXISTS':
@@ -253,8 +277,14 @@ export class ApiExceptionFilter implements ExceptionFilter {
       case 'TELEMETRY_DEVICE_NOT_ASSIGNED':
       case 'TELEMETRY_DEVICE_ALREADY_ASSIGNED':
       case 'TELEMETRY_DEVICE_HAS_ACTIVE_ASSIGNMENT':
+      case 'TELEMETRY_DEVICE_SUSPENDED':
       case 'DUPLICATE_TELEMETRY_POSITION':
       case 'INVALID_DEVICE_STATUS_TRANSITION':
+      case 'INTEGRATION_CONNECTION_ALREADY_EXISTS':
+      case 'INTEGRATION_VERSION_CONFLICT':
+      case 'INBOUND_TELEMATICS_REPLAY_CONFLICT':
+      case 'INTEGRATION_MAPPING_ALREADY_EXISTS':
+      case 'DUPLICATE_EXTERNAL_TRANSACTION':
         return HttpStatus.CONFLICT;
       default:
         return HttpStatus.INTERNAL_SERVER_ERROR;

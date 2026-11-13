@@ -11,8 +11,8 @@ import type { IntegrationEventPublisher } from './outbox.types.js';
 const organizationId = '12000000-0000-4000-8000-000000000001';
 const eventId = '72000000-0000-4000-8000-000000000001';
 const databaseUrl =
-  process.env.DATABASE_URL ??
-  'postgresql://vehicle_management:local_vehicle_management@localhost:5432/vehicle_management?schema=public';
+  process.env.DATABASE_URL?.replace('localhost', '127.0.0.1') ??
+  'postgresql://vehicle_management:local_vehicle_management@127.0.0.1:5432/vehicle_management?schema=public';
 const config = {
   OUTBOX_BATCH_SIZE: 20,
   OUTBOX_LOCK_TIMEOUT_MS: 60_000,

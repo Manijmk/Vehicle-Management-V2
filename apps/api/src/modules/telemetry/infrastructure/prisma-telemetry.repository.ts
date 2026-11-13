@@ -4,12 +4,11 @@ import {
   type PrismaClient,
   TelemetryDeviceStatus,
   TelemetryPositionStatus,
+  type TelemetrySource,
   TripStatus,
 } from '@vms/database';
 import { DATABASE } from '../../../common/tokens.js';
-import {
-  calculateFreshnessStatus,
-} from '../domain/telemetry.js';
+import { calculateFreshnessStatus } from '../domain/telemetry.js';
 import {
   TelemetryDeviceAlreadyExistsError,
   TelemetryDeviceNotFoundError,
@@ -21,6 +20,7 @@ import type {
   HistoryQueryOptions,
   IngestPositionParams,
   TelemetryCurrentPositionRecord,
+  TelemetryDeviceCredentialRecord,
   TelemetryDeviceRecord,
   TelemetryPositionRecord,
   TelemetryRepository,
@@ -28,9 +28,7 @@ import type {
 } from '../application/telemetry.repository.js';
 
 @Injectable()
-export class PrismaTelemetryRepository
-  implements TelemetryRepository, DeviceRepository
-{
+export class PrismaTelemetryRepository implements TelemetryRepository, DeviceRepository {
   constructor(
     @Inject(DATABASE)
     private readonly database: PrismaClient,
@@ -77,6 +75,19 @@ export class PrismaTelemetryRepository
         notes: notes ?? null,
         metadata: metadata ? (metadata as Prisma.InputJsonValue) : Prisma.DbNull,
       },
+    });
+
+    await this.auditDeviceAction({
+      organizationId,
+      action: 'TELEMETRY_DEVICE_REGISTERED',
+      deviceId: created.id,
+      after: {
+        displayId: created.displayId,
+        name: created.name,
+        identifier: created.identifier,
+        status: created.status,
+      },
+      actorId: params.actorId,
     });
 
     return this.mapDevice(created);
@@ -199,6 +210,7 @@ export class PrismaTelemetryRepository
     organizationId: string,
     deviceId: string,
     newStatus: TelemetryDeviceStatus,
+    actorId?: string | undefined,
   ): Promise<TelemetryDeviceRecord> {
     const updated = await this.database.telemetryDevice.update({
       where: { id: deviceId, organizationId },
@@ -224,6 +236,17 @@ export class PrismaTelemetryRepository
       },
     });
 
+    await this.auditDeviceAction({
+      organizationId,
+      action:
+        newStatus === TelemetryDeviceStatus.ACTIVE
+          ? 'TELEMETRY_DEVICE_ACTIVATED'
+          : 'TELEMETRY_DEVICE_SUSPENDED',
+      deviceId,
+      after: { status: newStatus },
+      actorId,
+    });
+
     return this.mapDevice(updated);
   }
 
@@ -240,6 +263,14 @@ export class PrismaTelemetryRepository
       },
     });
 
+    await this.auditDeviceAction({
+      organizationId,
+      action: 'TELEMETRY_DEVICE_ASSIGNED',
+      deviceId,
+      after: { vehicleId, assignedBy },
+      actorId: assignedBy,
+    });
+
     const device = await this.getDeviceById(organizationId, deviceId);
     if (!device) {
       throw new TelemetryDeviceNotFoundError(deviceId);
@@ -251,6 +282,7 @@ export class PrismaTelemetryRepository
     organizationId: string,
     deviceId: string,
     notes?: string,
+    unassignedBy?: string,
   ): Promise<TelemetryDeviceRecord> {
     const active = await this.database.telemetryDeviceVehicleAssignment.findFirst({
       where: {
@@ -267,6 +299,14 @@ export class PrismaTelemetryRepository
           unassignedAt: new Date(),
           ...(notes !== undefined ? { notes: notes ?? null } : {}),
         },
+      });
+
+      await this.auditDeviceAction({
+        organizationId,
+        action: 'TELEMETRY_DEVICE_UNASSIGNED',
+        deviceId,
+        after: { vehicleId: active.vehicleId, unassignedAt: new Date() },
+        actorId: unassignedBy,
       });
     }
 
@@ -342,10 +382,185 @@ export class PrismaTelemetryRepository
     return trip;
   }
 
-  async verifyVehicleExists(
+  async findTripForVehicleAtTime(
     organizationId: string,
     vehicleId: string,
-  ): Promise<boolean> {
+    capturedAt: Date,
+  ): Promise<{ id: string } | null> {
+    const trip = await this.database.trip.findFirst({
+      where: {
+        organizationId,
+        vehicleId,
+        status: { in: [TripStatus.IN_PROGRESS, TripStatus.COMPLETED, TripStatus.ABORTED] },
+        actualStartAt: { lte: capturedAt },
+        OR: [
+          { actualEndAt: { gte: capturedAt } },
+          { actualEndAt: null, status: TripStatus.IN_PROGRESS },
+        ],
+      },
+      select: { id: true },
+      orderBy: { actualStartAt: 'desc' },
+    });
+    return trip;
+  }
+
+  async createCredential(params: {
+    readonly organizationId: string;
+    readonly deviceId: string;
+    readonly keyPrefix: string;
+    readonly secretHash: string;
+    readonly actorId?: string | undefined;
+  }): Promise<TelemetryDeviceCredentialRecord> {
+    const created = await this.database.telemetryDeviceCredential.create({
+      data: {
+        organizationId: params.organizationId,
+        deviceId: params.deviceId,
+        keyPrefix: params.keyPrefix,
+        secretHash: params.secretHash,
+        status: 'ACTIVE',
+      },
+    });
+
+    await this.auditDeviceAction({
+      organizationId: params.organizationId,
+      action: 'TELEMETRY_DEVICE_CREDENTIAL_PROVISIONED',
+      deviceId: params.deviceId,
+      after: { credentialId: created.id, keyPrefix: created.keyPrefix },
+      actorId: params.actorId,
+    });
+
+    return {
+      id: created.id,
+      organizationId: created.organizationId,
+      deviceId: created.deviceId,
+      keyPrefix: created.keyPrefix,
+      secretHash: created.secretHash,
+      status: created.status as 'ACTIVE' | 'REVOKED',
+      createdAt: created.createdAt,
+      lastUsedAt: created.lastUsedAt,
+      revokedAt: created.revokedAt,
+      revokedBy: created.revokedBy,
+    };
+  }
+
+  async listCredentials(
+    organizationId: string,
+    deviceId: string,
+  ): Promise<readonly TelemetryDeviceCredentialRecord[]> {
+    const list = await this.database.telemetryDeviceCredential.findMany({
+      where: { organizationId, deviceId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return list.map((c) => ({
+      id: c.id,
+      organizationId: c.organizationId,
+      deviceId: c.deviceId,
+      keyPrefix: c.keyPrefix,
+      secretHash: c.secretHash,
+      status: c.status as 'ACTIVE' | 'REVOKED',
+      createdAt: c.createdAt,
+      lastUsedAt: c.lastUsedAt,
+      revokedAt: c.revokedAt,
+      revokedBy: c.revokedBy,
+    }));
+  }
+
+  async getCredentialByKeyPrefix(
+    keyPrefix: string,
+  ): Promise<TelemetryDeviceCredentialRecord | null> {
+    const c = await this.database.telemetryDeviceCredential.findUnique({
+      where: { keyPrefix },
+    });
+    if (!c) return null;
+    return {
+      id: c.id,
+      organizationId: c.organizationId,
+      deviceId: c.deviceId,
+      keyPrefix: c.keyPrefix,
+      secretHash: c.secretHash,
+      status: c.status as 'ACTIVE' | 'REVOKED',
+      createdAt: c.createdAt,
+      lastUsedAt: c.lastUsedAt,
+      revokedAt: c.revokedAt,
+      revokedBy: c.revokedBy,
+    };
+  }
+
+  async revokeCredential(
+    organizationId: string,
+    deviceId: string,
+    credentialId: string,
+    revokedBy: string,
+  ): Promise<TelemetryDeviceCredentialRecord> {
+    const updated = await this.database.telemetryDeviceCredential.update({
+      where: { id: credentialId, organizationId, deviceId },
+      data: {
+        status: 'REVOKED',
+        revokedAt: new Date(),
+        revokedBy,
+      },
+    });
+
+    await this.auditDeviceAction({
+      organizationId,
+      action: 'TELEMETRY_DEVICE_CREDENTIAL_REVOKED',
+      deviceId,
+      after: { credentialId: updated.id, keyPrefix: updated.keyPrefix },
+      actorId: revokedBy,
+    });
+
+    return {
+      id: updated.id,
+      organizationId: updated.organizationId,
+      deviceId: updated.deviceId,
+      keyPrefix: updated.keyPrefix,
+      secretHash: updated.secretHash,
+      status: updated.status as 'ACTIVE' | 'REVOKED',
+      createdAt: updated.createdAt,
+      lastUsedAt: updated.lastUsedAt,
+      revokedAt: updated.revokedAt,
+      revokedBy: updated.revokedBy,
+    };
+  }
+
+  async updateCredentialLastUsed(credentialId: string): Promise<void> {
+    await this.database.telemetryDeviceCredential.update({
+      where: { id: credentialId },
+      data: { lastUsedAt: new Date() },
+    });
+  }
+
+  async auditDeviceAction(params: {
+    readonly organizationId: string;
+    readonly action: string;
+    readonly deviceId: string;
+    readonly before?: unknown;
+    readonly after?: unknown;
+    readonly actorId?: string | undefined;
+    readonly requestId?: string | undefined;
+    readonly ipAddress?: string | undefined;
+    readonly userAgent?: string | undefined;
+  }): Promise<void> {
+    if (!params.actorId) {
+      return;
+    }
+    await this.database.auditLog.create({
+      data: {
+        organizationId: params.organizationId,
+        action: params.action,
+        entityType: 'TelemetryDevice',
+        entityId: params.deviceId,
+        ...(params.before ? { beforeData: params.before as Prisma.InputJsonValue } : {}),
+        ...(params.after ? { afterData: params.after as Prisma.InputJsonValue } : {}),
+        actorId: params.actorId,
+        requestId: params.requestId ?? 'system',
+        ipAddress: params.ipAddress ?? null,
+        userAgent: params.userAgent ?? null,
+      },
+    });
+  }
+
+  async verifyVehicleExists(organizationId: string, vehicleId: string): Promise<boolean> {
     const count = await this.database.vehicle.count({
       where: { id: vehicleId, organizationId },
     });
@@ -382,18 +597,56 @@ export class PrismaTelemetryRepository
       ignition,
       odometerKm,
       source,
-      status = TelemetryPositionStatus.VALID,
       providerMessageId,
       rawMetadata,
     } = params;
 
-    return this.database.$transaction(async (tx) => {
-      let positionRow;
-      try {
-        positionRow = await tx.telemetryPosition.create({
+    // Check for duplicate providerMessageId upfront for idempotent return
+    if (providerMessageId) {
+      const existing = await (deviceId
+        ? this.database.telemetryPosition.findFirst({
+            where: {
+              organizationId,
+              deviceId,
+              providerMessageId,
+            },
+          })
+        : this.database.telemetryPosition.findFirst({
+            where: {
+              organizationId,
+              source,
+              providerMessageId,
+              deviceId: null,
+            },
+          }));
+      if (existing) {
+        return this.mapPosition(existing);
+      }
+    }
+
+    // Check existing current position for out-of-order classification
+    const existingCurrent = await this.database.telemetryCurrentPosition.findUnique({
+      where: {
+        organizationId_vehicleId: {
+          organizationId,
+          vehicleId,
+        },
+      },
+      select: { capturedAt: true },
+    });
+
+    const isOutOfOrder =
+      existingCurrent != null && capturedAt.getTime() < existingCurrent.capturedAt.getTime();
+    const resolvedStatus = isOutOfOrder
+      ? TelemetryPositionStatus.OUT_OF_ORDER
+      : (params.status ?? TelemetryPositionStatus.VALID);
+
+    try {
+      return await this.database.$transaction(async (tx) => {
+        const positionRow = await tx.telemetryPosition.create({
           data: {
             organizationId,
-            deviceId,
+            deviceId: deviceId ?? null,
             vehicleId,
             tripId: tripId ?? null,
             capturedAt,
@@ -407,105 +660,115 @@ export class PrismaTelemetryRepository
             ignition: ignition ?? null,
             odometerKm: odometerKm ?? null,
             source,
-            status,
+            status: resolvedStatus,
             providerMessageId: providerMessageId ?? null,
-            rawMetadata: rawMetadata
-              ? (rawMetadata as Prisma.InputJsonValue)
-              : Prisma.DbNull,
+            rawMetadata: rawMetadata ? (rawMetadata as Prisma.InputJsonValue) : Prisma.DbNull,
           },
         });
-      } catch (err: unknown) {
-        // Catch duplicate provider message ID (Prisma error code P2002) for race safety and idempotent return
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002' &&
-          providerMessageId
-        ) {
-          const existing = await tx.telemetryPosition.findFirst({
-            where: {
-              organizationId,
-              deviceId,
-              providerMessageId,
-            },
-          });
-          if (existing) {
-            return this.mapPosition(existing);
-          }
-        }
-        throw err;
-      }
 
-      // Check current position for out-of-order protection
-      const existingCurrent = await tx.telemetryCurrentPosition.findUnique({
-        where: {
-          organizationId_vehicleId: {
-            organizationId,
-            vehicleId,
-          },
-        },
+        // Atomic current position projection:
+        // Use conditional ON CONFLICT DO UPDATE so stale points cannot overwrite newer ones
+        // Deterministic tie-breaker:
+        // 1. Newer captured_at wins
+        // 2. Equal captured_at: strictly newer received_at wins
+        // 3. Exact equal on both timestamps: first persisted wins (no update executed)
+        await tx.$executeRawUnsafe(
+          `INSERT INTO "telemetry_current_positions" (
+            "organization_id", "vehicle_id", "device_id", "position_id",
+            "latitude", "longitude", "speed_kmh", "heading", "ignition", "odometer_km",
+            "captured_at", "received_at", "source", "status", "updated_at"
+          ) VALUES (
+            $1::uuid, $2::uuid, $3::uuid, $4::uuid,
+            $5, $6, $7, $8, $9, $10,
+            $11::timestamptz, $12::timestamptz, $13::"TelemetrySource", $14::"TelemetryPositionStatus", NOW()
+          )
+          ON CONFLICT ("organization_id", "vehicle_id")
+          DO UPDATE SET
+            "device_id" = EXCLUDED."device_id",
+            "position_id" = EXCLUDED."position_id",
+            "latitude" = EXCLUDED."latitude",
+            "longitude" = EXCLUDED."longitude",
+            "speed_kmh" = EXCLUDED."speed_kmh",
+            "heading" = EXCLUDED."heading",
+            "ignition" = EXCLUDED."ignition",
+            "odometer_km" = EXCLUDED."odometer_km",
+            "captured_at" = EXCLUDED."captured_at",
+            "received_at" = EXCLUDED."received_at",
+            "source" = EXCLUDED."source",
+            "status" = EXCLUDED."status",
+            "updated_at" = NOW()
+          WHERE EXCLUDED."captured_at" > "telemetry_current_positions"."captured_at"
+             OR (EXCLUDED."captured_at" = "telemetry_current_positions"."captured_at" AND EXCLUDED."received_at" > "telemetry_current_positions"."received_at");`,
+          organizationId,
+          vehicleId,
+          deviceId ?? null,
+          positionRow.id,
+          latitude,
+          longitude,
+          speedKmh ?? null,
+          heading ?? null,
+          ignition ?? null,
+          odometerKm ?? null,
+          capturedAt.toISOString(),
+          receivedAt.toISOString(),
+          source,
+          resolvedStatus,
+        );
+
+        return this.mapPosition(positionRow);
       });
-
-      if (!existingCurrent) {
-        await tx.telemetryCurrentPosition.create({
-          data: {
-            organizationId,
-            vehicleId,
-            deviceId,
-            positionId: positionRow.id,
-            latitude: new Prisma.Decimal(latitude),
-            longitude: new Prisma.Decimal(longitude),
-            speedKmh: speedKmh != null ? new Prisma.Decimal(speedKmh) : null,
-            heading: heading != null ? new Prisma.Decimal(heading) : null,
-            ignition: ignition ?? null,
-            odometerKm: odometerKm ?? null,
-            capturedAt,
-            receivedAt,
-            source,
-            status,
-          },
-        });
-      } else if (capturedAt.getTime() > existingCurrent.capturedAt.getTime()) {
-        // Out-of-order guard: only update if new capturedAt is strictly later than existing
-        await tx.telemetryCurrentPosition.update({
-          where: {
-            organizationId_vehicleId: {
-              organizationId,
-              vehicleId,
-            },
-          },
-          data: {
-            deviceId,
-            positionId: positionRow.id,
-            latitude: new Prisma.Decimal(latitude),
-            longitude: new Prisma.Decimal(longitude),
-            speedKmh: speedKmh != null ? new Prisma.Decimal(speedKmh) : null,
-            heading: heading != null ? new Prisma.Decimal(heading) : null,
-            ignition: ignition ?? null,
-            odometerKm: odometerKm ?? null,
-            capturedAt,
-            receivedAt,
-            source,
-            status,
-          },
-        });
+    } catch (err: unknown) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002' &&
+        providerMessageId
+      ) {
+        const existing = await (deviceId
+          ? this.database.telemetryPosition.findFirst({
+              where: {
+                organizationId,
+                deviceId,
+                providerMessageId,
+              },
+            })
+          : this.database.telemetryPosition.findFirst({
+              where: {
+                organizationId,
+                source,
+                providerMessageId,
+                deviceId: null,
+              },
+            }));
+        if (existing) {
+          return this.mapPosition(existing);
+        }
       }
-
-      return this.mapPosition(positionRow);
-    });
+      throw err;
+    }
   }
 
   async findPositionByProviderMessageId(
     organizationId: string,
-    deviceId: string,
+    deviceId: string | null | undefined,
     providerMessageId: string,
+    source?: TelemetrySource,
   ): Promise<TelemetryPositionRecord | null> {
-    const row = await this.database.telemetryPosition.findFirst({
-      where: {
-        organizationId,
-        deviceId,
-        providerMessageId,
-      },
-    });
+    const row = await (deviceId
+      ? this.database.telemetryPosition.findFirst({
+          where: {
+            organizationId,
+            deviceId,
+            providerMessageId,
+          },
+        })
+      : this.database.telemetryPosition.findFirst({
+          where: {
+            organizationId,
+            ...(source ? { source } : {}),
+            providerMessageId,
+            deviceId: null,
+          },
+        }));
     return row ? this.mapPosition(row) : null;
   }
 
@@ -534,15 +797,17 @@ export class PrismaTelemetryRepository
 
     if (!row) return null;
 
-    const device = await this.database.telemetryDevice.findUnique({
-      where: { id: row.deviceId },
-      select: {
-        id: true,
-        displayId: true,
-        name: true,
-        identifier: true,
-      },
-    });
+    const device = row.deviceId
+      ? await this.database.telemetryDevice.findUnique({
+          where: { id: row.deviceId },
+          select: {
+            id: true,
+            displayId: true,
+            name: true,
+            identifier: true,
+          },
+        })
+      : null;
 
     return this.mapCurrentPosition(row, device);
   }
@@ -567,19 +832,26 @@ export class PrismaTelemetryRepository
 
     if (rows.length === 0) return [];
 
-    const deviceIds = [...new Set(rows.map((r) => r.deviceId))];
-    const devices = await this.database.telemetryDevice.findMany({
-      where: { id: { in: deviceIds }, organizationId },
-      select: {
-        id: true,
-        displayId: true,
-        name: true,
-        identifier: true,
-      },
-    });
+    const deviceIds = [
+      ...new Set(rows.map((r) => r.deviceId).filter((id): id is string => id != null)),
+    ];
+    const devices =
+      deviceIds.length > 0
+        ? await this.database.telemetryDevice.findMany({
+            where: { id: { in: deviceIds }, organizationId },
+            select: {
+              id: true,
+              displayId: true,
+              name: true,
+              identifier: true,
+            },
+          })
+        : [];
     const deviceMap = new Map(devices.map((d) => [d.id, d]));
 
-    return rows.map((r) => this.mapCurrentPosition(r, deviceMap.get(r.deviceId)));
+    return rows.map((r) =>
+      this.mapCurrentPosition(r, r.deviceId ? (deviceMap.get(r.deviceId) ?? null) : null),
+    );
   }
 
   async getPositionHistory(
@@ -618,7 +890,7 @@ export class PrismaTelemetryRepository
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
-    const nextCursor = hasMore ? items[items.length - 1]?.id ?? null : null;
+    const nextCursor = hasMore ? (items[items.length - 1]?.id ?? null) : null;
 
     return {
       items: items.map((r) => this.mapPosition(r)),
@@ -642,7 +914,22 @@ export class PrismaTelemetryRepository
   // PRIVATE MAPPERS
   // ==========================================
 
-  private mapDevice(row: any): TelemetryDeviceRecord {
+  private mapDevice(
+    row: Prisma.TelemetryDeviceGetPayload<Record<string, never>> & {
+      vehicleAssignments?: Array<{
+        id: string;
+        vehicleId: string;
+        assignedAt: Date;
+        assignedBy: string;
+        vehicle?: {
+          id: string;
+          displayId: string;
+          registration: string;
+          model: string;
+        } | null;
+      }>;
+    },
+  ): TelemetryDeviceRecord {
     const active = row.vehicleAssignments?.[0];
     return {
       id: row.id,
@@ -668,7 +955,9 @@ export class PrismaTelemetryRepository
     };
   }
 
-  private mapPosition(row: any): TelemetryPositionRecord {
+  private mapPosition(
+    row: Prisma.TelemetryPositionGetPayload<Record<string, never>>,
+  ): TelemetryPositionRecord {
     return {
       id: row.id,
       organizationId: row.organizationId,
@@ -693,7 +982,11 @@ export class PrismaTelemetryRepository
   }
 
   private mapCurrentPosition(
-    row: any,
+    row: Prisma.TelemetryCurrentPositionGetPayload<{
+      include: {
+        vehicle: { select: { id: true; displayId: true; registration: true; model: true } };
+      };
+    }>,
     device?: { id: string; displayId: string; name: string; identifier: string } | null,
   ): TelemetryCurrentPositionRecord {
     return {

@@ -172,6 +172,27 @@ export function TenantHeader({ onAuthChange }: { onAuthChange?: () => void }) {
         >
           Notifications
         </Link>
+        <Link
+          href="/telemetry"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-telemetry"
+        >
+          Telemetry
+        </Link>
+        <Link
+          href="/reports"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-reports"
+        >
+          Reports
+        </Link>
+        <Link
+          href="/integrations"
+          style={{ color: 'var(--accent, #1a56db)', textDecoration: 'none', fontWeight: 500 }}
+          data-testid="nav-integrations"
+        >
+          Integrations
+        </Link>
       </nav>
 
       <div

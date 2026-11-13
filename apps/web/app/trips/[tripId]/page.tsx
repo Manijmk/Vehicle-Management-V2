@@ -11,12 +11,14 @@ import {
   financeApi,
   incidentApi,
   maintenanceApi,
+  telemetryApi,
   tripApi,
   vehicleApi,
   type CurrentUserResponse,
   type IncidentRecord,
   type InspectionRecord,
   type SubjectComplianceResponse,
+  type TelemetryPositionRecord,
   type TripFinanceSummaryResponse,
   type TripRecord,
   type TripStatusHistoryEntry,
@@ -40,6 +42,7 @@ export default function TripDetailPage() {
   const [driverCompliance, setDriverCompliance] = useState<SubjectComplianceResponse | null>(null);
   const [tripFinance, setTripFinance] = useState<TripFinanceSummaryResponse | null>(null);
   const [tripIncidents, setTripIncidents] = useState<IncidentRecord[]>([]);
+  const [routePositions, setRoutePositions] = useState<TelemetryPositionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
@@ -68,36 +71,40 @@ export default function TripDetailPage() {
       setLoading(true);
       setError(null);
       setConflictMessage(null);
-      const [t, hist, inspRes, user, mSummary, vComp, dComp, finRes, incRes] = await Promise.all([
-        tripApi.fetchTrip(tripId),
-        tripApi.fetchTripStatusHistory(tripId).catch(() => []),
-        api.fetchTripInspections(tripId).catch(() => ({ items: [], total: 0 })),
-        vehicleApi.fetchCurrentUser().catch(() => null),
-        tripApi
-          .fetchTrip(tripId)
-          .then((tr) =>
-            tr.vehicleId
-              ? maintenanceApi.fetchVehicleMaintenance(tr.vehicleId).catch(() => null)
-              : null,
-          )
-          .catch(() => null),
-        tripApi
-          .fetchTrip(tripId)
-          .then((tr) =>
-            tr.vehicleId
-              ? complianceApi.fetchVehicleCompliance(tr.vehicleId).catch(() => null)
-              : null,
-          )
-          .catch(() => null),
-        tripApi
-          .fetchTrip(tripId)
-          .then((tr) =>
-            tr.driverId ? complianceApi.fetchDriverCompliance(tr.driverId).catch(() => null) : null,
-          )
-          .catch(() => null),
-        financeApi.fetchTripFinance(tripId).catch(() => null),
-        incidentApi.fetchTripIncidents(tripId, 20).catch(() => ({ items: [], total: 0 })),
-      ]);
+      const [t, hist, inspRes, user, mSummary, vComp, dComp, finRes, incRes, routeRes] =
+        await Promise.all([
+          tripApi.fetchTrip(tripId),
+          tripApi.fetchTripStatusHistory(tripId).catch(() => []),
+          api.fetchTripInspections(tripId).catch(() => ({ items: [], total: 0 })),
+          vehicleApi.fetchCurrentUser().catch(() => null),
+          tripApi
+            .fetchTrip(tripId)
+            .then((tr) =>
+              tr.vehicleId
+                ? maintenanceApi.fetchVehicleMaintenance(tr.vehicleId).catch(() => null)
+                : null,
+            )
+            .catch(() => null),
+          tripApi
+            .fetchTrip(tripId)
+            .then((tr) =>
+              tr.vehicleId
+                ? complianceApi.fetchVehicleCompliance(tr.vehicleId).catch(() => null)
+                : null,
+            )
+            .catch(() => null),
+          tripApi
+            .fetchTrip(tripId)
+            .then((tr) =>
+              tr.driverId
+                ? complianceApi.fetchDriverCompliance(tr.driverId).catch(() => null)
+                : null,
+            )
+            .catch(() => null),
+          financeApi.fetchTripFinance(tripId).catch(() => null),
+          incidentApi.fetchTripIncidents(tripId, 20).catch(() => ({ items: [], total: 0 })),
+          telemetryApi.getTripRoute(tripId).catch(() => []),
+        ]);
       setTrip(t);
       setHistory(hist);
       setInspections(inspRes.items);
@@ -107,6 +114,7 @@ export default function TripDetailPage() {
       setDriverCompliance(dComp);
       setTripFinance(finRes);
       setTripIncidents(incRes?.items ?? []);
+      setRoutePositions(routeRes);
 
       const defaultOdo = t.vehicle?.odometerKm ?? t.startOdometerKm ?? 0;
       setStartOdo(defaultOdo);
@@ -1472,6 +1480,131 @@ export default function TripDetailPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </section>
+
+      {/* Telemetry Route Visualization */}
+      <section
+        style={{
+          marginTop: '2rem',
+          borderTop: '1px solid #e5e7eb',
+          paddingTop: '1.5rem',
+        }}
+        data-testid="trip-telemetry-route-section"
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1rem',
+          }}
+        >
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 600, margin: 0 }}>
+            GPS Route Track ({routePositions.length} points)
+          </h2>
+        </div>
+
+        {routePositions.length === 0 ? (
+          <p style={{ color: '#6b7280', margin: 0 }} data-testid="trip-no-route">
+            No GPS telemetry points recorded during this trip.
+          </p>
+        ) : (
+          <div>
+            {/* SVG polyline route */}
+            <div style={{ marginBottom: '1rem' }}>
+              <svg
+                width="100%"
+                height={200}
+                role="img"
+                aria-label={`Trip route track with ${routePositions.length} GPS points`}
+                style={{ border: '1px solid #e5e7eb', borderRadius: 8, background: '#f8fafc' }}
+              >
+                {(() => {
+                  const lats = routePositions.map((p) => p.latitude);
+                  const lons = routePositions.map((p) => p.longitude);
+                  const minLat = Math.min(...lats);
+                  const maxLat = Math.max(...lats);
+                  const minLon = Math.min(...lons);
+                  const maxLon = Math.max(...lons);
+                  const latRange = maxLat - minLat || 0.005;
+                  const lonRange = maxLon - minLon || 0.005;
+                  const W = 600;
+                  const H = 200;
+                  const PAD = 20;
+
+                  const points = routePositions
+                    .map((p) => {
+                      const x = PAD + ((p.longitude - minLon) / lonRange) * (W - 2 * PAD);
+                      const y = H - PAD - ((p.latitude - minLat) / latRange) * (H - 2 * PAD);
+                      return `${x.toFixed(1)},${y.toFixed(1)}`;
+                    })
+                    .join(' ');
+
+                  return (
+                    <>
+                      <polyline
+                        fill="none"
+                        stroke="#1a56db"
+                        strokeWidth={3}
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                        points={points}
+                      />
+                      {routePositions.map((p, idx) => {
+                        const x = PAD + ((p.longitude - minLon) / lonRange) * (W - 2 * PAD);
+                        const y = H - PAD - ((p.latitude - minLat) / latRange) * (H - 2 * PAD);
+                        const isStart = idx === 0;
+                        const isEnd = idx === routePositions.length - 1;
+                        return (
+                          <circle
+                            key={p.id}
+                            cx={x}
+                            cy={y}
+                            r={isStart || isEnd ? 6 : 3}
+                            fill={isStart ? '#16a34a' : isEnd ? '#dc2626' : '#2563eb'}
+                            stroke="#fff"
+                            strokeWidth={1.5}
+                          />
+                        );
+                      })}
+                    </>
+                  );
+                })()}
+              </svg>
+            </div>
+
+            <div style={{ overflowX: 'auto', maxHeight: '200px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                <thead>
+                  <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'left' }}>Time</th>
+                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Lat</th>
+                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Lon</th>
+                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Speed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {routePositions.map((p) => (
+                    <tr key={p.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '0.35rem 0.5rem' }}>
+                        {new Date(p.capturedAt).toLocaleTimeString()}
+                      </td>
+                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>
+                        {p.latitude.toFixed(5)}
+                      </td>
+                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>
+                        {p.longitude.toFixed(5)}
+                      </td>
+                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>
+                        {p.speedKmh != null ? `${p.speedKmh.toFixed(1)} km/h` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </section>

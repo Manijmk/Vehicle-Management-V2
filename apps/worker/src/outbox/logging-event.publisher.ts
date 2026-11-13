@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import type { PrismaClient } from '@vms/database';
+import type { Prisma, PrismaClient } from '@vms/database';
 
 import type { ClaimedOutboxEvent, IntegrationEventPublisher } from './outbox.types.js';
 import { WORKER_DATABASE } from './tokens.js';
@@ -32,6 +32,69 @@ export class LoggingEventPublisher implements IntegrationEventPublisher {
 
     if (this.notificationEvaluator) {
       await this.notificationEvaluator.handleEvent(event);
+    }
+
+    await this.enqueueWebhookDeliveries(event);
+  }
+
+  private async enqueueWebhookDeliveries(event: ClaimedOutboxEvent): Promise<void> {
+    try {
+      const subscriptions = await this.database.webhookSubscription.findMany({
+        where: {
+          organizationId: event.organizationId,
+          status: 'ACTIVE',
+          connection: {
+            status: 'ACTIVE',
+          },
+        },
+      });
+
+      const matching = subscriptions.filter(
+        (sub) => sub.eventTypes.includes('*') || sub.eventTypes.includes(event.eventType),
+      );
+
+      for (const sub of matching) {
+        const existing = await this.database.webhookDelivery.findUnique({
+          where: {
+            organizationId_subscriptionId_sourceEventId: {
+              organizationId: event.organizationId,
+              subscriptionId: sub.id,
+              sourceEventId: event.id,
+            },
+          },
+        });
+
+        if (!existing) {
+          const envelope = {
+            eventId: event.id,
+            eventType: event.eventType,
+            eventVersion: '1.0',
+            occurredAt: event.occurredAt.toISOString(),
+            resourceType: event.aggregateType,
+            resourceId: event.aggregateId,
+            data: (event.payload && typeof event.payload === 'object'
+              ? event.payload
+              : {}) as Record<string, unknown>,
+          };
+
+          await this.database.webhookDelivery.create({
+            data: {
+              organizationId: event.organizationId,
+              subscriptionId: sub.id,
+              sourceEventId: event.id,
+              eventType: event.eventType,
+              payload: envelope as Prisma.InputJsonValue,
+              deliveryStatus: 'PENDING',
+              attempts: 0,
+              nextAttemptAt: new Date(),
+            },
+          });
+        }
+      }
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Failed to enqueue webhook deliveries for event ${event.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 

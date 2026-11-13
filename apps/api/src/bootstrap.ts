@@ -30,7 +30,7 @@ export function configureApiApplication(
 }
 
 export async function createApiApplication(config: ApiConfig): Promise<INestApplication> {
-  const application = await NestFactory.create(AppModule, { bufferLogs: true });
+  const application = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   configureApiApplication(application, config);
 
   const openApiConfig = new DocumentBuilder()

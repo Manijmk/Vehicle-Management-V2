@@ -12,6 +12,7 @@ import {
   financeApi,
   incidentApi,
   maintenanceApi,
+  telemetryApi,
   tripApi,
   vehicleApi,
   type ComplianceDocumentTypeRecord,
@@ -21,6 +22,7 @@ import {
   type InspectionRecord,
   type MaintenancePlanRecord,
   type SubjectComplianceResponse,
+  type TelemetryCurrentPositionRecord,
   type TripRecord,
   type VehicleDriverAssignmentRecord,
   type VehicleFinanceSummaryResponse,
@@ -43,6 +45,9 @@ export default function VehicleDetailPage() {
   const [assignmentHistory, setAssignmentHistory] = useState<VehicleDriverAssignmentRecord[]>([]);
   const [currentTrip, setCurrentTrip] = useState<TripRecord | null>(null);
   const [tripHistory, setTripHistory] = useState<TripRecord[]>([]);
+  const [telemetryPosition, setTelemetryPosition] = useState<TelemetryCurrentPositionRecord | null>(
+    null,
+  );
   const [inspections, setInspections] = useState<InspectionRecord[]>([]);
   const [vehicleFinance, setVehicleFinance] = useState<VehicleFinanceSummaryResponse | null>(null);
   const [vehicleIncidents, setVehicleIncidents] = useState<IncidentRecord[]>([]);
@@ -119,6 +124,7 @@ export default function VehicleDetailPage() {
         docTypesRes,
         finRes,
         incRes,
+        telemPos,
       ] = await Promise.all([
         vehicleApi.fetchVehicle(vehicleId),
         vehicleApi.fetchStatusHistory(vehicleId),
@@ -143,6 +149,7 @@ export default function VehicleDetailPage() {
           .catch(() => ({ items: [], total: 0 })),
         financeApi.fetchVehicleFinance(vehicleId).catch(() => null),
         incidentApi.fetchVehicleIncidents(vehicleId, 20).catch(() => ({ items: [], total: 0 })),
+        telemetryApi.getCurrentVehiclePosition(vehicleId).catch(() => null),
       ]);
       setVehicle(v);
       setHistory(h);
@@ -158,6 +165,7 @@ export default function VehicleDetailPage() {
       setComplianceData(compRes);
       setVehicleDocTypes(docTypesRes.items);
       setVehicleFinance(finRes);
+      setTelemetryPosition(telemPos);
       setVehicleIncidents(incRes?.items ?? []);
       setEditData({
         model: v.model,
@@ -2281,6 +2289,103 @@ export default function VehicleDetailPage() {
               </tbody>
             </table>
           </div>
+        )}
+      </section>
+
+      {/* Telemetry Status Section */}
+      <section
+        style={{
+          marginTop: '2rem',
+          borderTop: '1px solid #e5e7eb',
+          paddingTop: '1.5rem',
+        }}
+        data-testid="vehicle-telemetry-section"
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1rem',
+          }}
+        >
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 600, margin: 0 }}>
+            Telemetry & GPS Location
+          </h2>
+          <Link
+            href="/telemetry"
+            style={{
+              color: '#2563eb',
+              textDecoration: 'none',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+            }}
+          >
+            View Fleet Map →
+          </Link>
+        </div>
+
+        {telemetryPosition ? (
+          <div
+            style={{
+              padding: '1rem',
+              background: '#f9fafb',
+              border: '1px solid #e5e7eb',
+              borderRadius: 8,
+              fontSize: '0.875rem',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '1rem',
+            }}
+            data-testid="vehicle-telemetry-data"
+          >
+            <div>
+              <span style={{ color: '#6b7280', fontSize: '0.75rem', display: 'block' }}>
+                Latitude / Longitude
+              </span>
+              <strong>
+                {telemetryPosition.latitude.toFixed(5)}, {telemetryPosition.longitude.toFixed(5)}
+              </strong>
+            </div>
+            <div>
+              <span style={{ color: '#6b7280', fontSize: '0.75rem', display: 'block' }}>Speed</span>
+              <strong>
+                {telemetryPosition.speedKmh != null
+                  ? `${telemetryPosition.speedKmh.toFixed(1)} km/h`
+                  : '—'}
+              </strong>
+            </div>
+            <div>
+              <span style={{ color: '#6b7280', fontSize: '0.75rem', display: 'block' }}>
+                Freshness
+              </span>
+              <strong>
+                {telemetryPosition.freshness === 'FRESH'
+                  ? '🟢 Fresh'
+                  : telemetryPosition.freshness === 'STALE'
+                    ? '🟡 Stale'
+                    : '⚫ Unknown'}
+              </strong>
+            </div>
+            <div>
+              <span style={{ color: '#6b7280', fontSize: '0.75rem', display: 'block' }}>
+                Device
+              </span>
+              <strong>
+                {telemetryPosition.device?.displayId ?? telemetryPosition.deviceId.slice(0, 8)}
+              </strong>
+            </div>
+            <div>
+              <span style={{ color: '#6b7280', fontSize: '0.75rem', display: 'block' }}>
+                Captured At
+              </span>
+              <span>{new Date(telemetryPosition.capturedAt).toLocaleString()}</span>
+            </div>
+          </div>
+        ) : (
+          <p style={{ color: '#6b7280', margin: 0 }} data-testid="vehicle-no-telemetry">
+            No live telemetry position recorded for this vehicle.
+          </p>
         )}
       </section>
     </main>

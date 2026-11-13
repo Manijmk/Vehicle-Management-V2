@@ -12,8 +12,8 @@ import { ComplianceExpirySchedulerService } from './compliance-expiry-scheduler.
 import type { ClaimedOutboxEvent } from '../outbox/outbox.types.js';
 
 const databaseUrl =
-  process.env.DATABASE_URL ??
-  'postgresql://vehicle_management:local_vehicle_management@localhost:5432/vehicle_management?schema=public';
+  process.env.DATABASE_URL?.replace('localhost', '127.0.0.1') ??
+  'postgresql://vehicle_management:local_vehicle_management@127.0.0.1:5432/vehicle_management?schema=public';
 
 describe('Worker Notifications & Automation Integration', () => {
   let database: PrismaClient;
@@ -91,20 +91,23 @@ describe('Worker Notifications & Automation Integration', () => {
   });
 
   afterAll(async () => {
-    // Clean up
-    await database.notificationDeliveryAttempt.deleteMany({ where: { organizationId: testOrgId } });
-    await database.notificationRecipient.deleteMany({ where: { organizationId: testOrgId } });
-    await database.notification.deleteMany({ where: { organizationId: testOrgId } });
-    await database.notificationPreference.deleteMany({ where: { organizationId: testOrgId } });
-    await database.notificationTemplate.deleteMany({ where: { organizationId: testOrgId } });
-    await database.automationDeduplication.deleteMany({ where: { organizationId: testOrgId } });
-    await database.complianceDocument.deleteMany({ where: { organizationId: testOrgId } });
-    await database.complianceDocumentType.deleteMany({ where: { organizationId: testOrgId } });
-    await database.vehicle.deleteMany({ where: { organizationId: testOrgId } });
-    await database.organizationMembership.deleteMany({ where: { organizationId: testOrgId } });
-    await database.user.deleteMany({ where: { id: testUserId } });
-    await database.organization.deleteMany({ where: { id: testOrgId } });
-    await database.$disconnect();
+    if (!database) return;
+    try {
+      await database.notificationDeliveryAttempt.deleteMany({ where: { organizationId: testOrgId } });
+      await database.notificationRecipient.deleteMany({ where: { organizationId: testOrgId } });
+      await database.notification.deleteMany({ where: { organizationId: testOrgId } });
+      await database.notificationPreference.deleteMany({ where: { organizationId: testOrgId } });
+      await database.notificationTemplate.deleteMany({ where: { organizationId: testOrgId } });
+      await database.automationDeduplication.deleteMany({ where: { organizationId: testOrgId } });
+      await database.complianceDocument.deleteMany({ where: { organizationId: testOrgId } });
+      await database.complianceDocumentType.deleteMany({ where: { organizationId: testOrgId } });
+      await database.vehicle.deleteMany({ where: { organizationId: testOrgId } });
+      await database.organizationMembership.deleteMany({ where: { organizationId: testOrgId } });
+      await database.user.deleteMany({ where: { id: testUserId } });
+      await database.organization.deleteMany({ where: { id: testOrgId } });
+    } finally {
+      await database.$disconnect();
+    }
   });
 
   it('creates notification and delivery attempts on critical IncidentReported event', async () => {

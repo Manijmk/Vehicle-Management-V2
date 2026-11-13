@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -15,6 +16,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../../identity/transport/authenticated-request.js';
 import { RequirePermissions, TenantScoped } from '../../identity/transport/security.decorators.js';
 import { DeviceService } from '../application/device.service.js';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DTO classes are runtime validation metadata.
 import {
   AssignDeviceDto,
   CreateDeviceDto,
@@ -36,17 +38,15 @@ export class DeviceController {
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions('telemetry.device.manage')
   @ApiOperation({ summary: 'Register a new telemetry device' })
-  async createDevice(
-    @Req() req: AuthenticatedRequest,
-    @Body() dto: CreateDeviceDto,
-  ) {
+  async createDevice(@Req() req: AuthenticatedRequest, @Body() dto: CreateDeviceDto) {
     const organizationId = req.tenant!.organizationId;
     return this.deviceService.createDevice({
       organizationId,
       name: dto.name,
       identifier: dto.identifier,
-      notes: dto.notes,
-      metadata: dto.metadata,
+      notes: dto.notes ?? null,
+      metadata: dto.metadata ?? null,
+      actorId: req.principal.userId,
     });
   }
 
@@ -81,9 +81,10 @@ export class DeviceController {
     return this.deviceService.updateDevice({
       organizationId,
       deviceId,
-      name: dto.name,
-      notes: dto.notes,
-      metadata: dto.metadata,
+      ...(dto.name !== undefined ? { name: dto.name } : {}),
+      ...(dto.notes !== undefined ? { notes: dto.notes ?? null } : {}),
+      ...(dto.metadata !== undefined ? { metadata: dto.metadata ?? null } : {}),
+      actorId: req.principal.userId,
     });
   }
 
@@ -103,7 +104,7 @@ export class DeviceController {
       deviceId,
       vehicleId: dto.vehicleId,
       assignedBy,
-      notes: dto.notes,
+      notes: dto.notes ?? null,
     });
   }
 
@@ -117,7 +118,12 @@ export class DeviceController {
     @Body() dto: UnassignDeviceDto,
   ) {
     const organizationId = req.tenant!.organizationId;
-    return this.deviceService.unassignDevice(organizationId, deviceId, dto.notes);
+    return this.deviceService.unassignDevice(
+      organizationId,
+      deviceId,
+      dto.notes,
+      req.principal.userId,
+    );
   }
 
   @Post(':deviceId/suspend')
@@ -129,7 +135,7 @@ export class DeviceController {
     @Param('deviceId', ParseUUIDPipe) deviceId: string,
   ) {
     const organizationId = req.tenant!.organizationId;
-    return this.deviceService.suspendDevice(organizationId, deviceId);
+    return this.deviceService.suspendDevice(organizationId, deviceId, req.principal.userId);
   }
 
   @Post(':deviceId/activate')
@@ -141,6 +147,68 @@ export class DeviceController {
     @Param('deviceId', ParseUUIDPipe) deviceId: string,
   ) {
     const organizationId = req.tenant!.organizationId;
-    return this.deviceService.activateDevice(organizationId, deviceId);
+    return this.deviceService.activateDevice(organizationId, deviceId, req.principal.userId);
+  }
+
+  @Post(':deviceId/reassign')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('telemetry.device.manage')
+  @ApiOperation({
+    summary: 'Reassign a telemetry device to another vehicle, ending prior active assignment',
+  })
+  async reassignDevice(
+    @Req() req: AuthenticatedRequest,
+    @Param('deviceId', ParseUUIDPipe) deviceId: string,
+    @Body() dto: AssignDeviceDto,
+  ) {
+    const organizationId = req.tenant!.organizationId;
+    const assignedBy = req.principal.userId;
+    return this.deviceService.reassignDevice({
+      organizationId,
+      deviceId,
+      vehicleId: dto.vehicleId,
+      assignedBy,
+      notes: dto.notes ?? null,
+    });
+  }
+
+  @Post(':deviceId/credentials')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions('telemetry.device.manage')
+  @ApiOperation({ summary: 'Provision or rotate machine credential for a telemetry device' })
+  async createCredential(
+    @Req() req: AuthenticatedRequest,
+    @Param('deviceId', ParseUUIDPipe) deviceId: string,
+  ) {
+    const organizationId = req.tenant!.organizationId;
+    const actorId = req.principal.userId;
+    return this.deviceService.createCredential(organizationId, deviceId, actorId);
+  }
+
+  @Get(':deviceId/credentials')
+  @RequirePermissions('telemetry.device.read')
+  @ApiOperation({
+    summary: 'List machine credentials for a telemetry device (secret hash not exposed)',
+  })
+  async listCredentials(
+    @Req() req: AuthenticatedRequest,
+    @Param('deviceId', ParseUUIDPipe) deviceId: string,
+  ) {
+    const organizationId = req.tenant!.organizationId;
+    return this.deviceService.listCredentials(organizationId, deviceId);
+  }
+
+  @Delete(':deviceId/credentials/:credentialId')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('telemetry.device.manage')
+  @ApiOperation({ summary: 'Revoke a telemetry device machine credential' })
+  async revokeCredential(
+    @Req() req: AuthenticatedRequest,
+    @Param('deviceId', ParseUUIDPipe) deviceId: string,
+    @Param('credentialId', ParseUUIDPipe) credentialId: string,
+  ) {
+    const organizationId = req.tenant!.organizationId;
+    const revokedBy = req.principal.userId;
+    return this.deviceService.revokeCredential(organizationId, deviceId, credentialId, revokedBy);
   }
 }

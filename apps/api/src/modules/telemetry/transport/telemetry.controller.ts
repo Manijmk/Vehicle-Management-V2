@@ -15,11 +15,8 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../../identity/transport/authenticated-request.js';
 import { RequirePermissions, TenantScoped } from '../../identity/transport/security.decorators.js';
 import { TelemetryService } from '../application/telemetry.service.js';
-import {
-  BatchIngestDto,
-  HistoryQueryDto,
-  IngestPositionDto,
-} from './telemetry.dto.js';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DTO classes are runtime validation metadata.
+import { BatchIngestDto, HistoryQueryDto, IngestPositionDto } from './telemetry.dto.js';
 
 @ApiTags('telemetry')
 @ApiBearerAuth()
@@ -31,43 +28,41 @@ export class TelemetryController {
     private readonly telemetryService: TelemetryService,
   ) {}
 
-  @Post('ingest')
+  @Post(['positions', 'ingest'])
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions('telemetry.ingest')
   @ApiOperation({ summary: 'Ingest a single telemetry/GPS position' })
-  async ingestPosition(
-    @Req() req: AuthenticatedRequest,
-    @Body() dto: IngestPositionDto,
-  ) {
+  async ingestPosition(@Req() req: AuthenticatedRequest, @Body() dto: IngestPositionDto) {
     const organizationId = req.tenant!.organizationId;
-    return this.telemetryService.ingestPosition({
-      organizationId,
-      deviceId: dto.deviceId,
-      capturedAt: dto.capturedAt,
-      latitude: dto.latitude,
-      longitude: dto.longitude,
-      speedKmh: dto.speedKmh,
-      heading: dto.heading,
-      altitudeM: dto.altitudeM,
-      accuracyM: dto.accuracyM,
-      ignition: dto.ignition,
-      odometerKm: dto.odometerKm,
-      source: dto.source,
-      providerMessageId: dto.providerMessageId,
-      rawMetadata: dto.rawMetadata,
-    });
+    return this.telemetryService.ingestPosition(
+      {
+        organizationId,
+        deviceId: dto.deviceId,
+        vehicleId: dto.vehicleId,
+        capturedAt: dto.capturedAt,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        speedKmh: dto.speedKmh ?? null,
+        heading: dto.heading ?? null,
+        altitudeM: dto.altitudeM ?? null,
+        accuracyM: dto.accuracyM ?? null,
+        ignition: dto.ignition ?? null,
+        odometerKm: dto.odometerKm ?? null,
+        ...(dto.source !== undefined ? { source: dto.source } : {}),
+        providerMessageId: dto.providerMessageId ?? null,
+        rawMetadata: dto.rawMetadata ?? null,
+      },
+      'human_single',
+    );
   }
 
-  @Post('ingest/batch')
+  @Post(['positions/batch', 'ingest/batch'])
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('telemetry.ingest')
   @ApiOperation({ summary: 'Batch ingest up to 100 telemetry/GPS positions' })
-  async ingestBatch(
-    @Req() req: AuthenticatedRequest,
-    @Body() dto: BatchIngestDto,
-  ) {
+  async ingestBatch(@Req() req: AuthenticatedRequest, @Body() dto: BatchIngestDto) {
     const organizationId = req.tenant!.organizationId;
-    return this.telemetryService.ingestBatch(organizationId, dto.positions);
+    return this.telemetryService.ingestBatch(organizationId, dto.positions, 'human_batch');
   }
 
   @Get('current')
@@ -98,12 +93,13 @@ export class TelemetryController {
     @Query() query: HistoryQueryDto,
   ) {
     const organizationId = req.tenant!.organizationId;
-    return this.telemetryService.getVehicleHistory(organizationId, vehicleId, {
-      from: query.from ? new Date(query.from) : undefined,
-      to: query.to ? new Date(query.to) : undefined,
-      limit: query.limit,
-      cursor: query.cursor,
-    });
+    const historyOptions = {
+      ...(query.from ? { from: new Date(query.from) } : {}),
+      ...(query.to ? { to: new Date(query.to) } : {}),
+      ...(query.limit !== undefined ? { limit: query.limit } : {}),
+      ...(query.cursor ? { cursor: query.cursor } : {}),
+    };
+    return this.telemetryService.getVehicleHistory(organizationId, vehicleId, historyOptions);
   }
 
   @Get('trips/:tripId/route')

@@ -2949,3 +2949,1240 @@ export interface NotificationTemplateItem {
   version: number;
   placeholders: string[];
 }
+
+// --- Milestone 12: Telemetry / GPS Types ---
+
+export type TelemetryDeviceStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+export type TelemetrySource = 'DEVICE' | 'MANUAL' | 'SIMULATED' | 'IMPORT';
+export type TelemetryPositionStatus = 'VALID' | 'INVALID' | 'STALE';
+export type TelemetryFreshness = 'FRESH' | 'STALE' | 'UNKNOWN';
+
+export interface TelemetryDeviceRecord {
+  id: string;
+  organizationId: string;
+  displayId: string;
+  name: string;
+  identifier: string;
+  status: TelemetryDeviceStatus;
+  notes?: string | null;
+  metadata?: Record<string, unknown> | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  activeAssignment?: {
+    id: string;
+    vehicleId: string;
+    assignedAt: string;
+    assignedBy: string;
+    vehicle?: {
+      id: string;
+      displayId: string;
+      registration: string;
+      model: string;
+    } | null;
+  } | null;
+}
+
+export interface TelemetryPositionRecord {
+  id: string;
+  organizationId: string;
+  deviceId: string;
+  vehicleId: string;
+  tripId?: string | null;
+  capturedAt: string;
+  receivedAt: string;
+  latitude: number;
+  longitude: number;
+  speedKmh?: number | null;
+  heading?: number | null;
+  altitudeM?: number | null;
+  accuracyM?: number | null;
+  ignition?: boolean | null;
+  odometerKm?: number | null;
+  source: TelemetrySource;
+  status: TelemetryPositionStatus;
+  providerMessageId?: string | null;
+  rawMetadata?: Record<string, unknown> | null;
+}
+
+export interface TelemetryCurrentPositionRecord {
+  organizationId: string;
+  vehicleId: string;
+  deviceId: string;
+  positionId: string;
+  latitude: number;
+  longitude: number;
+  speedKmh?: number | null;
+  heading?: number | null;
+  ignition?: boolean | null;
+  odometerKm?: number | null;
+  capturedAt: string;
+  receivedAt: string;
+  source: TelemetrySource;
+  status: TelemetryPositionStatus;
+  updatedAt: string;
+  freshness: TelemetryFreshness;
+  vehicle?: {
+    id: string;
+    displayId: string;
+    registration: string;
+    model: string;
+  } | null;
+  device?: {
+    id: string;
+    displayId: string;
+    name: string;
+    identifier: string;
+  } | null;
+}
+
+export interface BatchIngestResult {
+  accepted: number;
+  skipped: number;
+  errors: Array<{ index: number; code: string; message: string }>;
+}
+
+// --- Milestone 12: Telemetry API Client ---
+export const telemetryApi = {
+  // Device management
+  createDevice(data: {
+    name: string;
+    identifier: string;
+    notes?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<TelemetryDeviceRecord> {
+    return requestApi<TelemetryDeviceRecord>('/telemetry/devices', {
+      method: 'POST',
+      body: data,
+    });
+  },
+
+  listDevices(): Promise<TelemetryDeviceRecord[]> {
+    return requestApi<TelemetryDeviceRecord[]>('/telemetry/devices');
+  },
+
+  getDevice(deviceId: string): Promise<TelemetryDeviceRecord> {
+    return requestApi<TelemetryDeviceRecord>(`/telemetry/devices/${deviceId}`);
+  },
+
+  updateDevice(
+    deviceId: string,
+    data: { name?: string; notes?: string; metadata?: Record<string, unknown> },
+  ): Promise<TelemetryDeviceRecord> {
+    return requestApi<TelemetryDeviceRecord>(`/telemetry/devices/${deviceId}`, {
+      method: 'PATCH',
+      body: data,
+    });
+  },
+
+  assignDevice(
+    deviceId: string,
+    vehicleId: string,
+    notes?: string,
+  ): Promise<TelemetryDeviceRecord> {
+    return requestApi<TelemetryDeviceRecord>(`/telemetry/devices/${deviceId}/assign`, {
+      method: 'POST',
+      body: { vehicleId, ...(notes ? { notes } : {}) },
+    });
+  },
+
+  unassignDevice(deviceId: string, notes?: string): Promise<TelemetryDeviceRecord> {
+    return requestApi<TelemetryDeviceRecord>(`/telemetry/devices/${deviceId}/unassign`, {
+      method: 'POST',
+      body: { ...(notes ? { notes } : {}) },
+    });
+  },
+
+  suspendDevice(deviceId: string): Promise<TelemetryDeviceRecord> {
+    return requestApi<TelemetryDeviceRecord>(`/telemetry/devices/${deviceId}/suspend`, {
+      method: 'POST',
+      body: {},
+    });
+  },
+
+  activateDevice(deviceId: string): Promise<TelemetryDeviceRecord> {
+    return requestApi<TelemetryDeviceRecord>(`/telemetry/devices/${deviceId}/activate`, {
+      method: 'POST',
+      body: {},
+    });
+  },
+
+  // Telemetry ingestion
+  ingestPosition(data: {
+    deviceId: string;
+    capturedAt: string;
+    latitude: number;
+    longitude: number;
+    speedKmh?: number;
+    heading?: number;
+    altitudeM?: number;
+    accuracyM?: number;
+    ignition?: boolean;
+    odometerKm?: number;
+    source?: TelemetrySource;
+    providerMessageId?: string;
+    rawMetadata?: Record<string, unknown>;
+  }): Promise<TelemetryPositionRecord> {
+    return requestApi<TelemetryPositionRecord>('/telemetry/ingest', {
+      method: 'POST',
+      body: data,
+    });
+  },
+
+  // Fleet & vehicle positions
+  getCurrentFleetPositions(): Promise<TelemetryCurrentPositionRecord[]> {
+    return requestApi<TelemetryCurrentPositionRecord[]>('/telemetry/current');
+  },
+
+  getCurrentVehiclePosition(vehicleId: string): Promise<TelemetryCurrentPositionRecord | null> {
+    return requestApi<TelemetryCurrentPositionRecord | null>(
+      `/telemetry/vehicles/${vehicleId}/current`,
+    );
+  },
+
+  getVehicleHistory(
+    vehicleId: string,
+    params?: { from?: string; to?: string; limit?: number; cursor?: string },
+  ): Promise<{ items: TelemetryPositionRecord[]; nextCursor?: string | null }> {
+    const query = new URLSearchParams();
+    if (params?.from) query.set('from', params.from);
+    if (params?.to) query.set('to', params.to);
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.cursor) query.set('cursor', params.cursor);
+    const qs = query.toString();
+    return requestApi<{ items: TelemetryPositionRecord[]; nextCursor?: string | null }>(
+      `/telemetry/vehicles/${vehicleId}/history${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  getTripRoute(tripId: string): Promise<TelemetryPositionRecord[]> {
+    return requestApi<TelemetryPositionRecord[]>(`/telemetry/trips/${tripId}/route`);
+  },
+
+  createDeviceCredential(deviceId: string): Promise<{
+    id: string;
+    deviceId: string;
+    keyPrefix: string;
+    secret: string;
+    token: string;
+    createdAt: string;
+    status: 'ACTIVE' | 'REVOKED';
+  }> {
+    return requestApi(`/telemetry/devices/${deviceId}/credentials`, {
+      method: 'POST',
+      body: {},
+    });
+  },
+
+  listDeviceCredentials(deviceId: string): Promise<
+    Array<{
+      id: string;
+      deviceId: string;
+      keyPrefix: string;
+      status: 'ACTIVE' | 'REVOKED';
+      createdAt: string;
+      lastUsedAt?: string | null;
+      revokedAt?: string | null;
+    }>
+  > {
+    return requestApi(`/telemetry/devices/${deviceId}/credentials`);
+  },
+
+  revokeDeviceCredential(deviceId: string, credentialId: string): Promise<unknown> {
+    return requestApi(`/telemetry/devices/${deviceId}/credentials/${credentialId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  reassignDevice(
+    deviceId: string,
+    vehicleId: string,
+    notes?: string,
+  ): Promise<TelemetryDeviceRecord> {
+    return requestApi<TelemetryDeviceRecord>(`/telemetry/devices/${deviceId}/reassign`, {
+      method: 'POST',
+      body: { vehicleId, ...(notes ? { notes } : {}) },
+    });
+  },
+
+  ingestDeviceMachinePosition(
+    token: string,
+    data: {
+      capturedAt: string;
+      latitude: number;
+      longitude: number;
+      speedKmh?: number;
+      heading?: number;
+      altitudeM?: number;
+      accuracyM?: number;
+      ignition?: boolean;
+      odometerKm?: number;
+      providerMessageId?: string;
+      rawMetadata?: Record<string, unknown>;
+    },
+  ): Promise<TelemetryPositionRecord> {
+    return fetch(`${API_BASE_URL}/telemetry/device/positions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-device-key': token,
+      },
+      body: JSON.stringify(data),
+    }).then(async (res) => {
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error?.message || `HTTP error ${res.status}`);
+      }
+      return res.json();
+    });
+  },
+};
+
+export function getReportExportUrl(
+  reportKey: string,
+  format: 'csv' | 'pdf',
+  params: Record<string, string | number | undefined> = {},
+): string {
+  const q = new URLSearchParams();
+  q.set('format', format);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      q.set(key, String(value));
+    }
+  }
+  return `${API_BASE_URL}/reports/${reportKey}/export?${q.toString()}`;
+}
+
+export async function downloadReportExport(
+  reportKey: string,
+  format: 'csv' | 'pdf',
+  params: Record<string, string | number | undefined> = {},
+): Promise<{ blob: Blob; filename: string }> {
+  const url = getReportExportUrl(reportKey, format, params);
+  const token = getStoredAuthToken();
+  const orgId = getStoredOrganizationId();
+  const headers: Record<string, string> = {};
+  if (token) headers['authorization'] = `Bearer ${token}`;
+  if (orgId) headers['x-organization-id'] = orgId;
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.message || `Failed to export ${reportKey}: ${res.statusText}`);
+  }
+
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const filename = match?.[1] || `${reportKey}-export.${format}`;
+  const blob = await res.blob();
+  return { blob, filename };
+}
+
+export const reportingApi = {
+  getReportExportUrl,
+  downloadReportExport,
+
+  fetchFleetOverviewReport(
+    params: { from?: string | undefined; to?: string | undefined } = {},
+  ): Promise<FleetOverviewReport> {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    const qs = q.toString();
+    return requestApi<FleetOverviewReport>(`/reports/fleet-overview${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchVehicleUtilizationReport(
+    params: {
+      from?: string | undefined;
+      to?: string | undefined;
+      vehicleId?: string | undefined;
+      sortBy?: string | undefined;
+      sortOrder?: string | undefined;
+      page?: number | undefined;
+      limit?: number | undefined;
+    } = {},
+  ): Promise<VehicleUtilizationReport> {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    if (params.vehicleId) q.set('vehicleId', params.vehicleId);
+    if (params.sortBy) q.set('sortBy', params.sortBy);
+    if (params.sortOrder) q.set('sortOrder', params.sortOrder);
+    if (params.page) q.set('page', String(params.page));
+    if (params.limit) q.set('limit', String(params.limit));
+    const qs = q.toString();
+    return requestApi<VehicleUtilizationReport>(
+      `/reports/vehicle-utilization${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  fetchTripAnalyticsReport(
+    params: {
+      from?: string | undefined;
+      to?: string | undefined;
+      vehicleId?: string | undefined;
+      driverId?: string | undefined;
+      status?: string | undefined;
+    } = {},
+  ): Promise<TripAnalyticsReport> {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    if (params.vehicleId) q.set('vehicleId', params.vehicleId);
+    if (params.driverId) q.set('driverId', params.driverId);
+    if (params.status) q.set('status', params.status);
+    const qs = q.toString();
+    return requestApi<TripAnalyticsReport>(`/reports/trips${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchFuelAnalyticsReport(
+    params: {
+      from?: string | undefined;
+      to?: string | undefined;
+      vehicleId?: string | undefined;
+      fuelType?: string | undefined;
+    } = {},
+  ): Promise<FuelAnalyticsReport> {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    if (params.vehicleId) q.set('vehicleId', params.vehicleId);
+    if (params.fuelType) q.set('fuelType', params.fuelType);
+    const qs = q.toString();
+    return requestApi<FuelAnalyticsReport>(`/reports/fuel${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchCostAnalyticsReport(
+    params: {
+      from?: string | undefined;
+      to?: string | undefined;
+      vehicleId?: string | undefined;
+      categoryId?: string | undefined;
+      currency?: string | undefined;
+    } = {},
+  ): Promise<CostAnalyticsReport> {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    if (params.vehicleId) q.set('vehicleId', params.vehicleId);
+    if (params.categoryId) q.set('categoryId', params.categoryId);
+    if (params.currency) q.set('currency', params.currency);
+    const qs = q.toString();
+    return requestApi<CostAnalyticsReport>(`/reports/costs${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchMaintenanceAnalyticsReport(
+    params: {
+      from?: string | undefined;
+      to?: string | undefined;
+      vehicleId?: string | undefined;
+      status?: string | undefined;
+    } = {},
+  ): Promise<MaintenanceAnalyticsReport> {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    if (params.vehicleId) q.set('vehicleId', params.vehicleId);
+    if (params.status) q.set('status', params.status);
+    const qs = q.toString();
+    return requestApi<MaintenanceAnalyticsReport>(`/reports/maintenance${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchComplianceAnalyticsReport(
+    params: {
+      from?: string | undefined;
+      to?: string | undefined;
+    } = {},
+  ): Promise<ComplianceAnalyticsReport> {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    const qs = q.toString();
+    return requestApi<ComplianceAnalyticsReport>(`/reports/compliance${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchIncidentAnalyticsReport(
+    params: {
+      from?: string | undefined;
+      to?: string | undefined;
+      type?: string | undefined;
+      severity?: string | undefined;
+      status?: string | undefined;
+    } = {},
+  ): Promise<IncidentAnalyticsReport> {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    if (params.type) q.set('type', params.type);
+    if (params.severity) q.set('severity', params.severity);
+    if (params.status) q.set('status', params.status);
+    const qs = q.toString();
+    return requestApi<IncidentAnalyticsReport>(`/reports/incidents${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchTelemetryAnalyticsReport(
+    params: {
+      from?: string | undefined;
+      to?: string | undefined;
+    } = {},
+  ): Promise<TelemetryAnalyticsReport> {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    const qs = q.toString();
+    return requestApi<TelemetryAnalyticsReport>(`/reports/telemetry${qs ? `?${qs}` : ''}`);
+  },
+
+  fetchDashboardReport(
+    params: {
+      from?: string | undefined;
+      to?: string | undefined;
+    } = {},
+  ): Promise<DashboardReport> {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    const qs = q.toString();
+    return requestApi<DashboardReport>(`/reports/dashboard${qs ? `?${qs}` : ''}`);
+  },
+};
+
+export async function downloadAccountingExport(
+  connectionId: string,
+  params: { from: string; to: string; currency?: string | undefined },
+): Promise<{ blob: Blob; filename: string }> {
+  const q = new URLSearchParams({ from: params.from, to: params.to });
+  if (params.currency) q.set('currency', params.currency);
+  const url = `${API_BASE_URL}/integrations/${connectionId}/accounting/export?${q.toString()}`;
+  const token = getStoredAuthToken();
+  const orgId = getStoredOrganizationId();
+  const headers: Record<string, string> = {};
+  if (token) headers['authorization'] = `Bearer ${token}`;
+  if (orgId) headers['x-organization-id'] = orgId;
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.message || `Failed to export accounting CSV: ${res.statusText}`);
+  }
+
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const filename = match?.[1] || `accounting_export_${params.from}_${params.to}.csv`;
+  const blob = await res.blob();
+  return { blob, filename };
+}
+
+export interface IntegrationConnectionRecord {
+  id: string;
+  organizationId: string;
+  displayId: string;
+  name: string;
+  kind: 'OUTBOUND_WEBHOOK' | 'INBOUND_TELEMATICS' | 'FUEL_CARD_IMPORT' | 'ACCOUNTING_EXPORT';
+  provider: string;
+  status: 'DRAFT' | 'ACTIVE' | 'SUSPENDED' | 'DISABLED';
+  configuration: Record<string, unknown>;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  disabledAt?: string | null;
+  lastSuccessfulActivityAt?: string | null;
+  createdBy: string;
+  updatedBy?: string | null;
+  hasActiveSecret?: boolean;
+}
+
+export interface WebhookSubscriptionRecord {
+  id: string;
+  organizationId: string;
+  connectionId: string;
+  endpointUrl: string;
+  status: string;
+  eventTypes: string[];
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WebhookDeliveryAttemptRecord {
+  id: string;
+  deliveryId: string;
+  attemptNumber: number;
+  httpStatus?: number | null;
+  durationMs: number;
+  errorCode?: string | null;
+  responseExcerpt?: string | null;
+  attemptedAt: string;
+}
+
+export interface WebhookDeliveryRecord {
+  id: string;
+  organizationId: string;
+  subscriptionId: string;
+  sourceEventId: string;
+  eventType: string;
+  deliveryStatus: 'PENDING' | 'SUCCESS' | 'RETRYING' | 'EXHAUSTED' | 'FAILED';
+  attempts: number;
+  nextAttemptAt?: string | null;
+  deliveredAt?: string | null;
+  lastHttpStatus?: number | null;
+  lastErrorCode?: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  attemptsList?: WebhookDeliveryAttemptRecord[];
+}
+
+export interface IntegrationDeviceMappingRecord {
+  id: string;
+  organizationId: string;
+  connectionId: string;
+  providerDeviceId: string;
+  telemetryDeviceId: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+  telemetryDevice?: {
+    id: string;
+    displayId: string;
+    name: string;
+    identifier: string;
+  };
+}
+
+export interface FuelCardBatchRecord {
+  id: string;
+  organizationId: string;
+  connectionId: string;
+  status: 'PREVIEWED' | 'CONFIRMED' | 'FAILED';
+  fileName: string;
+  totalRows: number;
+  validRows: number;
+  importedRows: number;
+  errorSummary?: unknown;
+  createdAt: string;
+  confirmedAt?: string | null;
+  confirmedBy?: string | null;
+}
+
+export interface FuelCardPreviewRow {
+  rowNumber: number;
+  externalTransactionId: string;
+  vehicleRegistration: string;
+  occurredAt: string;
+  energyType: string;
+  quantity: string;
+  quantityUnit: string;
+  unitPrice: string;
+  totalAmount: string;
+  currencyCode: string;
+  stationName?: string;
+  odometerKm?: number;
+  vehicleId?: string;
+  validationError?: string;
+}
+
+export interface FuelCardPreviewResponse {
+  batchId: string;
+  fileName: string;
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  rows: FuelCardPreviewRow[];
+}
+
+export interface AccountingExportRecord {
+  id: string;
+  organizationId: string;
+  connectionId: string;
+  actorId: string;
+  format: string;
+  fromUtc: string;
+  toUtc: string;
+  rowCount: number;
+  createdAt: string;
+}
+
+export const integrationApi = {
+  fetchConnections(filters?: {
+    kind?: string | undefined;
+    status?: string | undefined;
+    search?: string | undefined;
+    limit?: number | undefined;
+    offset?: number | undefined;
+  }): Promise<{ items: IntegrationConnectionRecord[]; total: number }> {
+    const q = new URLSearchParams();
+    if (filters?.kind) q.set('kind', filters.kind);
+    if (filters?.status) q.set('status', filters.status);
+    if (filters?.search) q.set('search', filters.search);
+    if (filters?.limit) q.set('limit', String(filters.limit));
+    if (filters?.offset) q.set('offset', String(filters.offset));
+    const qs = q.toString();
+    return requestApi<{ items: IntegrationConnectionRecord[]; total: number }>(
+      `/integrations${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  createConnection(input: {
+    name: string;
+    kind: string;
+    provider?: string;
+    configuration?: Record<string, unknown>;
+  }): Promise<IntegrationConnectionRecord> {
+    return requestApi<IntegrationConnectionRecord>('/integrations', {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  fetchConnection(id: string): Promise<IntegrationConnectionRecord> {
+    return requestApi<IntegrationConnectionRecord>(`/integrations/${id}`);
+  },
+
+  updateConnection(
+    id: string,
+    version: number,
+    input: { name?: string; provider?: string; configuration?: Record<string, unknown> },
+  ): Promise<IntegrationConnectionRecord> {
+    return requestApi<IntegrationConnectionRecord>(`/integrations/${id}`, {
+      method: 'PATCH',
+      body: { ...input, version },
+    });
+  },
+
+  activateConnection(id: string, version: number): Promise<IntegrationConnectionRecord> {
+    return requestApi<IntegrationConnectionRecord>(`/integrations/${id}/activate`, {
+      method: 'POST',
+      body: { version },
+    });
+  },
+
+  suspendConnection(id: string, version: number): Promise<IntegrationConnectionRecord> {
+    return requestApi<IntegrationConnectionRecord>(`/integrations/${id}/suspend`, {
+      method: 'POST',
+      body: { version },
+    });
+  },
+
+  disableConnection(id: string, version: number): Promise<IntegrationConnectionRecord> {
+    return requestApi<IntegrationConnectionRecord>(`/integrations/${id}/disable`, {
+      method: 'POST',
+      body: { version },
+    });
+  },
+
+  provisionSecret(
+    id: string,
+  ): Promise<{ secretId: string; plaintextSecret: string; keyVersion: number; createdAt: string }> {
+    return requestApi<{
+      secretId: string;
+      plaintextSecret: string;
+      keyVersion: number;
+      createdAt: string;
+    }>(`/integrations/${id}/credentials`, {
+      method: 'POST',
+    });
+  },
+
+  rotateSecret(
+    id: string,
+  ): Promise<{ secretId: string; plaintextSecret: string; keyVersion: number; createdAt: string }> {
+    return requestApi<{
+      secretId: string;
+      plaintextSecret: string;
+      keyVersion: number;
+      createdAt: string;
+    }>(`/integrations/${id}/credentials/rotate`, {
+      method: 'POST',
+    });
+  },
+
+  revokeSecret(id: string, secretId: string): Promise<void> {
+    return requestApi<void>(`/integrations/${id}/credentials/revoke`, {
+      method: 'POST',
+      body: { secretId },
+    });
+  },
+
+  fetchSubscriptions(id: string): Promise<WebhookSubscriptionRecord[]> {
+    return requestApi<WebhookSubscriptionRecord[]>(`/integrations/${id}/webhook-subscriptions`);
+  },
+
+  createSubscription(
+    id: string,
+    input: { endpointUrl: string; eventTypes: string[] },
+  ): Promise<WebhookSubscriptionRecord> {
+    return requestApi<WebhookSubscriptionRecord>(`/integrations/${id}/webhook-subscriptions`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  deleteSubscription(id: string, subId: string): Promise<void> {
+    return requestApi<void>(`/integrations/${id}/webhook-subscriptions/${subId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  fetchDeliveries(
+    id: string,
+    filters?: {
+      status?: string | undefined;
+      eventType?: string | undefined;
+      limit?: number | undefined;
+      offset?: number | undefined;
+    },
+  ): Promise<{ items: WebhookDeliveryRecord[]; total: number }> {
+    const q = new URLSearchParams();
+    if (filters?.status) q.set('status', filters.status);
+    if (filters?.eventType) q.set('eventType', filters.eventType);
+    if (filters?.limit) q.set('limit', String(filters.limit));
+    if (filters?.offset) q.set('offset', String(filters.offset));
+    const qs = q.toString();
+    return requestApi<{ items: WebhookDeliveryRecord[]; total: number }>(
+      `/integrations/${id}/deliveries${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  fetchDelivery(id: string, deliveryId: string): Promise<WebhookDeliveryRecord> {
+    return requestApi<WebhookDeliveryRecord>(`/integrations/${id}/deliveries/${deliveryId}`);
+  },
+
+  retryDelivery(id: string, deliveryId: string): Promise<WebhookDeliveryRecord> {
+    return requestApi<WebhookDeliveryRecord>(`/integrations/${id}/deliveries/${deliveryId}/retry`, {
+      method: 'POST',
+    });
+  },
+
+  fetchDeviceMappings(id: string): Promise<IntegrationDeviceMappingRecord[]> {
+    return requestApi<IntegrationDeviceMappingRecord[]>(`/integrations/${id}/device-mappings`);
+  },
+
+  upsertDeviceMapping(
+    id: string,
+    input: { providerDeviceId: string; telemetryDeviceId: string },
+  ): Promise<IntegrationDeviceMappingRecord> {
+    return requestApi<IntegrationDeviceMappingRecord>(`/integrations/${id}/device-mappings`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  previewFuelCardImport(id: string, formData: FormData): Promise<FuelCardPreviewResponse> {
+    return requestApi<FuelCardPreviewResponse>(`/integrations/${id}/fuel-card/import/preview`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  confirmFuelCardImport(
+    id: string,
+    batchId: string,
+  ): Promise<{ batchId: string; importedRows: number; status: string }> {
+    return requestApi<{ batchId: string; importedRows: number; status: string }>(
+      `/integrations/${id}/fuel-card/import/confirm`,
+      {
+        method: 'POST',
+        body: { batchId },
+      },
+    );
+  },
+
+  fetchFuelCardImports(id: string): Promise<FuelCardBatchRecord[]> {
+    return requestApi<FuelCardBatchRecord[]>(`/integrations/${id}/fuel-card/imports`);
+  },
+
+  fetchAccountingExports(id: string): Promise<AccountingExportRecord[]> {
+    return requestApi<AccountingExportRecord[]>(`/integrations/${id}/accounting/exports`);
+  },
+};
+
+export interface FleetOverviewReport {
+  metadata: {
+    reportKey: string;
+    from: string;
+    to: string;
+    timezone: string;
+    generatedAt: string;
+  };
+  kpis: {
+    totalVehicles: number;
+    draftVehicles: number;
+    activeVehicles: number;
+    retiredVehicles: number;
+    assignedVehicles: number;
+    inProgressTripVehicles: number;
+    blockingMaintenanceCount: number | null;
+    blockingComplianceCount: number | null;
+    blockingIncidentCount: number | null;
+    freshTelemetryVehicles: number | null;
+    staleTelemetryVehicles: number | null;
+    unknownOrNoTelemetryVehicles: number | null;
+    completedTripsInPeriod: number | null;
+    totalTripDistanceKmInPeriod: number | null;
+  };
+}
+
+export interface VehicleUtilizationItem {
+  vehicleId: string;
+  displayId: string;
+  registration: string;
+  model: string;
+  status: string;
+  completedTripCount: number;
+  inProgressTripCount: number;
+  totalDistanceKm: number;
+  activeDurationSeconds: number;
+  activeTripDays: number;
+  averageTripDistanceKm: number | null;
+  tripTimeUtilizationPercent: number;
+}
+
+export interface VehicleUtilizationReport {
+  metadata: {
+    reportKey: string;
+    from: string;
+    to: string;
+    timezone: string;
+    generatedAt: string;
+    totalCount: number;
+    page: number;
+    limit: number;
+  };
+  summary: {
+    totalVehiclesEvaluated: number;
+    totalDistanceKm: number;
+    totalCompletedTrips: number;
+    averageUtilizationPercent: number | null;
+  };
+  items: VehicleUtilizationItem[];
+}
+
+export interface TripAnalyticsReport {
+  metadata: {
+    reportKey: string;
+    from: string;
+    to: string;
+    timezone: string;
+    generatedAt: string;
+  };
+  counts: {
+    totalTrips: number;
+    draftCount: number;
+    readyCount: number;
+    inProgressCount: number;
+    completedCount: number;
+    cancelledCount: number;
+    abortedCount: number;
+  };
+  rates: {
+    terminalTripsDenominator: number;
+    completionRatePercent: number | null;
+    cancellationRatePercent: number | null;
+    abortRatePercent: number | null;
+  };
+  metrics: {
+    totalDistanceKm: number;
+    averageDistanceKm: number | null;
+    totalDurationSeconds: number;
+    averageDurationSeconds: number | null;
+  };
+  timeSeries: {
+    bucketDate: string;
+    tripCount: number;
+    completedCount: number;
+    distanceKm: number;
+  }[];
+  topVehicles: {
+    vehicleId: string;
+    displayId: string;
+    tripCount: number;
+    distanceKm: number;
+  }[];
+  driverSummaries: {
+    driverId: string;
+    displayId: string;
+    name: string;
+    tripCount: number;
+    completedCount: number;
+    totalDistanceKm: number;
+  }[];
+}
+
+export interface FuelAnalyticsReport {
+  metadata: {
+    reportKey: string;
+    from: string;
+    to: string;
+    timezone: string;
+    generatedAt: string;
+  };
+  spendsByCurrency: {
+    currencyCode: string;
+    totalSpend: number;
+    transactionCount: number;
+  }[];
+  quantitiesByUnit: {
+    quantityUnit: string;
+    totalQuantity: number;
+  }[];
+  fuelTypeDistribution: {
+    fuelType: string;
+    count: number;
+    totalQuantity: number;
+    quantityUnit: string;
+  }[];
+  anomalies: {
+    anomalyCode: string;
+    count: number;
+  }[];
+  anomaliesBySeverity?: {
+    severity: string;
+    count: number;
+  }[];
+  efficiency: {
+    literTransactionsEvaluated: number;
+    totalLiters: number;
+    totalDistanceKm: number;
+    fleetKmLiter: number | null;
+  };
+  timeSeries: {
+    bucketDate: string;
+    currencyCode: string;
+    spend: number;
+    transactionCount: number;
+  }[];
+}
+
+export interface CostCurrencySummary {
+  currencyCode: string;
+  totalExpenseAmount: number;
+  totalFuelAmount: number;
+  totalCost: number;
+  expenseTransactionCount: number;
+  fuelTransactionCount: number;
+  authoritativeDistanceKm: number;
+  costPerKm: number | null;
+}
+
+export interface CostCategoryTotal {
+  categoryId: string;
+  categoryName: string;
+  currencyCode: string;
+  totalAmount: number;
+  percentageWithinCurrency: number;
+}
+
+export interface CostVehicleTotal {
+  vehicleId: string;
+  displayId: string;
+  registration: string;
+  currencyCode: string;
+  fuelAmount: number;
+  expenseAmount: number;
+  totalAmount: number;
+}
+
+export interface CostAnalyticsReport {
+  metadata: {
+    reportKey: string;
+    from: string;
+    to: string;
+    timezone: string;
+    generatedAt: string;
+  };
+  summariesByCurrency: CostCurrencySummary[];
+  categories: CostCategoryTotal[];
+  vehicleTotals: CostVehicleTotal[];
+  timeSeries: {
+    bucketDate: string;
+    currencyCode: string;
+    totalCost: number;
+  }[];
+}
+
+export interface MaintenanceAnalyticsReport {
+  metadata: {
+    reportKey: string;
+    from: string;
+    to: string;
+    timezone: string;
+    generatedAt: string;
+  };
+  requests: {
+    totalOpenRequests: number;
+    blockingRequestsCount: number;
+    requestsByStatus: {
+      status: string;
+      count: number;
+    }[];
+  };
+  workOrders: {
+    completedInPeriodCount: number;
+    workOrdersByStatus: {
+      status: string;
+      count: number;
+    }[];
+    averageCycleTimeHours: number | null;
+    operationalTotals: {
+      totalPartCostOperational: number;
+      totalLaborCostOperational: number;
+      totalWorkOrderOperationalCost: number;
+    };
+  };
+  preventiveSchedules: {
+    upcomingCount: number;
+    dueCount: number;
+    overdueCount: number;
+  };
+}
+
+export interface ComplianceAnalyticsReport {
+  metadata: {
+    reportKey: string;
+    from: string;
+    to: string;
+    timezone: string;
+    generatedAt: string;
+  };
+  vehicleCompliance: {
+    compliantCount: number;
+    warningCount: number;
+    nonCompliantCount: number;
+    blockedCount: number;
+  };
+  driverCompliance: {
+    compliantCount: number;
+    warningCount: number;
+    nonCompliantCount: number;
+    blockedCount: number;
+  };
+  documents: {
+    totalActiveDocuments: number;
+    expiredCount: number;
+    expiringSoonCount: number;
+    missingRequiredCount: number;
+    documentsByType: {
+      typeCode: string;
+      typeName: string;
+      count: number;
+    }[];
+  };
+  periodActivity: {
+    uploadedCount: number;
+    revokedCount: number;
+  };
+}
+
+export interface IncidentAnalyticsReport {
+  metadata: {
+    reportKey: string;
+    from: string;
+    to: string;
+    timezone: string;
+    generatedAt: string;
+  };
+  counts: {
+    totalIncidents: number;
+    unresolvedCount: number;
+    unresolvedBlockingCount: number;
+  };
+  distributionByType: {
+    type: string;
+    count: number;
+  }[];
+  distributionBySeverity: {
+    severity: string;
+    count: number;
+  }[];
+  distributionByStatus: {
+    status: string;
+    count: number;
+  }[];
+  distributionByOperationalImpact: {
+    operationalImpact: string;
+    count: number;
+  }[];
+  resolutionDuration: {
+    resolvedCount: number;
+    averageResolutionHours: number | null;
+    closedCount: number;
+    averageClosureHours: number | null;
+  };
+  timeSeries: {
+    bucketDate: string;
+    incidentCount: number;
+  }[];
+}
+
+export interface TelemetryAnalyticsReport {
+  metadata: {
+    reportKey: string;
+    from: string;
+    to: string;
+    timezone: string;
+    generatedAt: string;
+  };
+  devices: {
+    totalDevices: number;
+    activeDevices: number;
+    suspendedDevices: number;
+    inactiveDevices: number;
+    activeAssignmentsCount: number;
+  };
+  vehicleFreshness: {
+    freshCount: number;
+    staleCount: number;
+    unknownCount: number;
+  };
+  ingestion: {
+    totalPositionsIngested: number;
+    outOfOrderCount: number;
+    bySource: {
+      source: string;
+      count: number;
+    }[];
+  };
+  trackingCoverage: {
+    tripsInPeriod: number;
+    tripsWithTelemetry: number;
+    trackedTripCoveragePercent: number | null;
+  };
+}
+
+export interface DashboardReport {
+  metadata: {
+    reportKey: string;
+    from: string;
+    to: string;
+    timezone: string;
+    generatedAt: string;
+  };
+  fleetOverview: FleetOverviewReport['kpis'];
+  tripsSummary: {
+    totalTrips: number;
+    completedCount: number;
+    totalDistanceKm: number;
+    completionRatePercent: number | null;
+  } | null;
+  costsSummary: CostCurrencySummary[] | null;
+  maintenanceAlerts: {
+    blockingRequestsCount: number;
+    overdueSchedulesCount: number;
+  } | null;
+  complianceAlerts: {
+    nonCompliantVehicles: number;
+    nonCompliantDrivers: number;
+    expiredDocuments: number;
+  } | null;
+  incidentAlerts: {
+    unresolvedCount: number;
+    unresolvedBlockingCount: number;
+  } | null;
+  telemetryStatus: {
+    freshVehicles: number;
+    staleVehicles: number;
+    trackedTripCoveragePercent: number | null;
+  } | null;
+}

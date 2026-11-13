@@ -1,9 +1,9 @@
-import {
+import type {
   TelemetryDeviceStatus,
   TelemetryPositionStatus,
   TelemetrySource,
 } from '@vms/database';
-import { TelemetryFreshness } from '../domain/telemetry.js';
+import type { TelemetryFreshness } from '../domain/telemetry.js';
 
 export { TELEMETRY_REPOSITORY, DEVICE_REPOSITORY } from '../telemetry.tokens.js';
 
@@ -33,10 +33,23 @@ export interface TelemetryDeviceRecord {
   } | null;
 }
 
-export interface TelemetryPositionRecord {
+export interface TelemetryDeviceCredentialRecord {
   readonly id: string;
   readonly organizationId: string;
   readonly deviceId: string;
+  readonly keyPrefix: string;
+  readonly secretHash: string;
+  readonly status: 'ACTIVE' | 'REVOKED';
+  readonly createdAt: Date;
+  readonly lastUsedAt?: Date | null;
+  readonly revokedAt?: Date | null;
+  readonly revokedBy?: string | null;
+}
+
+export interface TelemetryPositionRecord {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly deviceId?: string | null;
   readonly vehicleId: string;
   readonly tripId?: string | null;
   readonly capturedAt: Date;
@@ -58,7 +71,7 @@ export interface TelemetryPositionRecord {
 export interface TelemetryCurrentPositionRecord {
   readonly organizationId: string;
   readonly vehicleId: string;
-  readonly deviceId: string;
+  readonly deviceId?: string | null;
   readonly positionId: string;
   readonly latitude: number;
   readonly longitude: number;
@@ -90,16 +103,18 @@ export interface CreateDeviceParams {
   readonly organizationId: string;
   readonly name: string;
   readonly identifier: string;
-  readonly notes?: string | null;
-  readonly metadata?: Record<string, unknown> | null;
+  readonly notes?: string | null | undefined;
+  readonly metadata?: Record<string, unknown> | null | undefined;
+  readonly actorId?: string | undefined;
 }
 
 export interface UpdateDeviceParams {
   readonly organizationId: string;
   readonly deviceId: string;
-  readonly name?: string;
-  readonly notes?: string | null;
-  readonly metadata?: Record<string, unknown> | null;
+  readonly name?: string | undefined;
+  readonly notes?: string | null | undefined;
+  readonly metadata?: Record<string, unknown> | null | undefined;
+  readonly actorId?: string | undefined;
 }
 
 export interface AssignDeviceParams {
@@ -107,43 +122,44 @@ export interface AssignDeviceParams {
   readonly deviceId: string;
   readonly vehicleId: string;
   readonly assignedBy: string;
-  readonly notes?: string | null;
+  readonly notes?: string | null | undefined;
 }
 
 export interface IngestPositionParams {
   readonly organizationId: string;
-  readonly deviceId: string;
+  readonly deviceId?: string | null | undefined;
   readonly vehicleId: string;
-  readonly tripId?: string | null;
+  readonly tripId?: string | null | undefined;
   readonly capturedAt: Date;
   readonly receivedAt: Date;
   readonly latitude: number;
   readonly longitude: number;
-  readonly speedKmh?: number | null;
-  readonly heading?: number | null;
-  readonly altitudeM?: number | null;
-  readonly accuracyM?: number | null;
-  readonly ignition?: boolean | null;
-  readonly odometerKm?: number | null;
+  readonly speedKmh?: number | null | undefined;
+  readonly heading?: number | null | undefined;
+  readonly altitudeM?: number | null | undefined;
+  readonly accuracyM?: number | null | undefined;
+  readonly ignition?: boolean | null | undefined;
+  readonly odometerKm?: number | null | undefined;
   readonly source: TelemetrySource;
-  readonly status?: TelemetryPositionStatus;
-  readonly providerMessageId?: string | null;
-  readonly rawMetadata?: Record<string, unknown> | null;
+  readonly status?: TelemetryPositionStatus | undefined;
+  readonly providerMessageId?: string | null | undefined;
+  readonly rawMetadata?: Record<string, unknown> | null | undefined;
 }
 
 export interface HistoryQueryOptions {
-  readonly from?: Date;
-  readonly to?: Date;
-  readonly limit?: number;
-  readonly cursor?: string;
+  readonly from?: Date | undefined;
+  readonly to?: Date | undefined;
+  readonly limit?: number | undefined;
+  readonly cursor?: string | undefined;
 }
 
 export interface TelemetryRepository {
   savePosition(params: IngestPositionParams): Promise<TelemetryPositionRecord>;
   findPositionByProviderMessageId(
     organizationId: string,
-    deviceId: string,
+    deviceId: string | null | undefined,
     providerMessageId: string,
+    source?: TelemetrySource,
   ): Promise<TelemetryPositionRecord | null>;
   getCurrentPositionForVehicle(
     organizationId: string,
@@ -160,25 +176,31 @@ export interface TelemetryRepository {
     readonly items: readonly TelemetryPositionRecord[];
     readonly nextCursor?: string | null;
   }>;
-  getTripRoute(
-    organizationId: string,
-    tripId: string,
-  ): Promise<readonly TelemetryPositionRecord[]>;
+  getTripRoute(organizationId: string, tripId: string): Promise<readonly TelemetryPositionRecord[]>;
 }
 
 export interface DeviceRepository {
   createDevice(params: CreateDeviceParams): Promise<TelemetryDeviceRecord>;
   getDeviceById(organizationId: string, deviceId: string): Promise<TelemetryDeviceRecord | null>;
-  getDeviceByIdentifier(organizationId: string, identifier: string): Promise<TelemetryDeviceRecord | null>;
+  getDeviceByIdentifier(
+    organizationId: string,
+    identifier: string,
+  ): Promise<TelemetryDeviceRecord | null>;
   listDevices(organizationId: string): Promise<readonly TelemetryDeviceRecord[]>;
   updateDevice(params: UpdateDeviceParams): Promise<TelemetryDeviceRecord>;
   updateDeviceStatus(
     organizationId: string,
     deviceId: string,
     newStatus: TelemetryDeviceStatus,
+    actorId?: string | undefined,
   ): Promise<TelemetryDeviceRecord>;
   assignDevice(params: AssignDeviceParams): Promise<TelemetryDeviceRecord>;
-  unassignDevice(organizationId: string, deviceId: string, notes?: string): Promise<TelemetryDeviceRecord>;
+  unassignDevice(
+    organizationId: string,
+    deviceId: string,
+    notes?: string | undefined,
+    unassignedBy?: string | undefined,
+  ): Promise<TelemetryDeviceRecord>;
   getActiveAssignmentByDeviceId(
     organizationId: string,
     deviceId: string,
@@ -201,6 +223,41 @@ export interface DeviceRepository {
     organizationId: string,
     vehicleId: string,
   ): Promise<{ id: string } | null>;
+  findTripForVehicleAtTime(
+    organizationId: string,
+    vehicleId: string,
+    capturedAt: Date,
+  ): Promise<{ id: string } | null>;
+  createCredential(params: {
+    readonly organizationId: string;
+    readonly deviceId: string;
+    readonly keyPrefix: string;
+    readonly secretHash: string;
+    readonly actorId?: string | undefined;
+  }): Promise<TelemetryDeviceCredentialRecord>;
+  listCredentials(
+    organizationId: string,
+    deviceId: string,
+  ): Promise<readonly TelemetryDeviceCredentialRecord[]>;
+  getCredentialByKeyPrefix(keyPrefix: string): Promise<TelemetryDeviceCredentialRecord | null>;
+  revokeCredential(
+    organizationId: string,
+    deviceId: string,
+    credentialId: string,
+    revokedBy: string,
+  ): Promise<TelemetryDeviceCredentialRecord>;
+  updateCredentialLastUsed(credentialId: string): Promise<void>;
+  auditDeviceAction(params: {
+    readonly organizationId: string;
+    readonly action: string;
+    readonly deviceId: string;
+    readonly before?: unknown;
+    readonly after?: unknown;
+    readonly actorId?: string | undefined;
+    readonly requestId?: string | undefined;
+    readonly ipAddress?: string | undefined;
+    readonly userAgent?: string | undefined;
+  }): Promise<void>;
   verifyVehicleExists(organizationId: string, vehicleId: string): Promise<boolean>;
   verifyTripExists(organizationId: string, tripId: string): Promise<boolean>;
 }

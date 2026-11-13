@@ -51,112 +51,129 @@ enum FuelType {
 }
 
 model Organization {
-  id                           String                        @id @default(uuid()) @db.Uuid
-  name                         String                        @db.VarChar(200)
-  slug                         String                        @unique @db.VarChar(100)
-  status                       PrincipalStatus               @default(ACTIVE)
-  version                      Int                           @default(1)
-  createdAt                    DateTime                      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                    DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(3)
-  memberships                  OrganizationMembership[]
-  roles                        Role[]
-  auditLogs                    AuditLog[]
-  outboxEvents                 OutboxEvent[]
-  vehicles                     Vehicle[]
-  vehicleStatusHistory         VehicleStatusHistory[]
-  drivers                      Driver[]
-  driverLicenses               DriverLicense[]
-  driverStatusHistory          DriverStatusHistory[]
-  vehicleDriverAssignments     VehicleDriverAssignment[]
-  trips                        Trip[]
-  tripStatusHistory            TripStatusHistory[]
-  inspectionTemplates          InspectionTemplate[]
-  inspectionTemplateItems      InspectionTemplateItem[]
-  inspections                  Inspection[]
-  inspectionResponses          InspectionResponse[]
-  maintenanceRequests          MaintenanceRequest[]
-  maintenancePlans             MaintenancePlan[]
-  vehicleMaintenanceSchedules  VehicleMaintenanceSchedule[]
-  maintenanceVendors           MaintenanceVendor[]
-  maintenanceWorkOrders        MaintenanceWorkOrder[]
-  maintenanceWorkOrderTasks    MaintenanceWorkOrderTask[]
-  maintenanceWorkOrderParts    MaintenanceWorkOrderPart[]
-  maintenanceWorkOrderLabor    MaintenanceWorkOrderLabor[]
-  complianceDocumentTypes      ComplianceDocumentType[]
-  complianceDocuments          ComplianceDocument[]
-  fuelTransactions             FuelTransaction[]
-  fuelTransactionAnomalies     FuelTransactionAnomaly[]
-  expenseCategories            ExpenseCategory[]
-  expenses                     Expense[]
-  fuelImportJobs               FuelImportJob[]
-  incidents                    Incident[]
-  incidentStatusHistory        IncidentStatusHistory[]
-  incidentNotes                IncidentNote[]
-  incidentAttachments          IncidentAttachment[]
-  notifications                Notification[]
-  notificationRecipients       NotificationRecipient[]
-  notificationDeliveryAttempts NotificationDeliveryAttempt[]
-  notificationPreferences      NotificationPreference[]
-  notificationTemplates        NotificationTemplate[]
-  automationDeduplications     AutomationDeduplication[]
-  telemetryDevices             TelemetryDevice[]
+  id                                String                             @id @default(uuid()) @db.Uuid
+  name                              String                             @db.VarChar(200)
+  slug                              String                             @unique @db.VarChar(100)
+  status                            PrincipalStatus                    @default(ACTIVE)
+  version                           Int                                @default(1)
+  createdAt                         DateTime                           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                         DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  memberships                       OrganizationMembership[]
+  roles                             Role[]
+  auditLogs                         AuditLog[]
+  outboxEvents                      OutboxEvent[]
+  vehicles                          Vehicle[]
+  vehicleStatusHistory              VehicleStatusHistory[]
+  drivers                           Driver[]
+  driverLicenses                    DriverLicense[]
+  driverStatusHistory               DriverStatusHistory[]
+  vehicleDriverAssignments          VehicleDriverAssignment[]
+  trips                             Trip[]
+  tripStatusHistory                 TripStatusHistory[]
+  inspectionTemplates               InspectionTemplate[]
+  inspectionTemplateItems           InspectionTemplateItem[]
+  inspections                       Inspection[]
+  inspectionResponses               InspectionResponse[]
+  maintenanceRequests               MaintenanceRequest[]
+  maintenancePlans                  MaintenancePlan[]
+  vehicleMaintenanceSchedules       VehicleMaintenanceSchedule[]
+  maintenanceVendors                MaintenanceVendor[]
+  maintenanceWorkOrders             MaintenanceWorkOrder[]
+  maintenanceWorkOrderTasks         MaintenanceWorkOrderTask[]
+  maintenanceWorkOrderParts         MaintenanceWorkOrderPart[]
+  maintenanceWorkOrderLabor         MaintenanceWorkOrderLabor[]
+  complianceDocumentTypes           ComplianceDocumentType[]
+  complianceDocuments               ComplianceDocument[]
+  fuelTransactions                  FuelTransaction[]
+  fuelTransactionAnomalies          FuelTransactionAnomaly[]
+  expenseCategories                 ExpenseCategory[]
+  expenses                          Expense[]
+  fuelImportJobs                    FuelImportJob[]
+  incidents                         Incident[]
+  incidentStatusHistory             IncidentStatusHistory[]
+  incidentNotes                     IncidentNote[]
+  incidentAttachments               IncidentAttachment[]
+  notifications                     Notification[]
+  notificationRecipients            NotificationRecipient[]
+  notificationDeliveryAttempts      NotificationDeliveryAttempt[]
+  integrationConnections            IntegrationConnection[]
+  integrationSecrets                IntegrationSecret[]
+  webhookSubscriptions              WebhookSubscription[]
+  webhookDeliveries                 WebhookDelivery[]
+  webhookDeliveryAttempts           WebhookDeliveryAttempt[]
+  inboundIntegrationReceipts        InboundIntegrationReceipt[]
+  integrationDeviceMappings         IntegrationDeviceMapping[]
+  fuelCardImportBatches             FuelCardImportBatch[]
+  externalTransactionIdentities     ExternalTransactionIdentity[]
+  accountingExportLogs              AccountingExportLog[]
+  notificationPreferences           NotificationPreference[]
+  notificationTemplates             NotificationTemplate[]
+  automationDeduplications          AutomationDeduplication[]
+  telemetryDevices                  TelemetryDevice[]
   telemetryDeviceVehicleAssignments TelemetryDeviceVehicleAssignment[]
-  telemetryPositions           TelemetryPosition[]
-  telemetryCurrentPositions    TelemetryCurrentPosition[]
+  telemetryPositions                TelemetryPosition[]
+  telemetryCurrentPositions         TelemetryCurrentPosition[]
+  telemetryDeviceCredentials        TelemetryDeviceCredential[]
 
   @@map("organizations")
 }
 
 model User {
-  id                           String                   @id @default(uuid()) @db.Uuid
-  email                        String                   @unique @db.VarChar(320)
-  displayName                  String                   @map("display_name") @db.VarChar(200)
-  status                       PrincipalStatus          @default(ACTIVE)
-  version                      Int                      @default(1)
-  createdAt                    DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                    DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
-  memberships                  OrganizationMembership[]
-  auditLogs                    AuditLog[]
-  vehicleStatusHistory         VehicleStatusHistory[]
-  driverStatusHistory          DriverStatusHistory[]
-  tripsCreated                 Trip[]                   @relation("TripCreatedBy")
-  tripsUpdated                 Trip[]                   @relation("TripUpdatedBy")
-  tripStatusHistory            TripStatusHistory[]
-  inspectionTemplatesCreated   InspectionTemplate[]     @relation("InspectionTemplateCreatedBy")
-  inspectionTemplatesUpdated   InspectionTemplate[]     @relation("InspectionTemplateUpdatedBy")
-  inspectionsCreated           Inspection[]             @relation("InspectionCreatedBy")
-  inspectionsUpdated           Inspection[]             @relation("InspectionUpdatedBy")
-  inspectionsPerformed         Inspection[]             @relation("InspectionPerformedBy")
-  maintenanceRequestsCreated   MaintenanceRequest[]     @relation("MaintenanceRequestCreatedBy")
-  maintenanceRequestsUpdated   MaintenanceRequest[]     @relation("MaintenanceRequestUpdatedBy")
-  maintenancePlansCreated      MaintenancePlan[]        @relation("MaintenancePlanCreatedBy")
-  maintenancePlansUpdated      MaintenancePlan[]        @relation("MaintenancePlanUpdatedBy")
-  maintenanceVendorsCreated    MaintenanceVendor[]      @relation("MaintenanceVendorCreatedBy")
-  maintenanceVendorsUpdated    MaintenanceVendor[]      @relation("MaintenanceVendorUpdatedBy")
-  maintenanceWorkOrdersCreated MaintenanceWorkOrder[]   @relation("MaintenanceWorkOrderCreatedBy")
-  maintenanceWorkOrdersUpdated MaintenanceWorkOrder[]   @relation("MaintenanceWorkOrderUpdatedBy")
-  complianceDocTypesCreated    ComplianceDocumentType[] @relation("ComplianceDocTypeCreatedBy")
-  complianceDocTypesUpdated    ComplianceDocumentType[] @relation("ComplianceDocTypeUpdatedBy")
-  complianceDocsCreated        ComplianceDocument[]     @relation("ComplianceDocCreatedBy")
-  complianceDocsUpdated        ComplianceDocument[]     @relation("ComplianceDocUpdatedBy")
-  complianceDocsRevoked        ComplianceDocument[]     @relation("ComplianceDocRevokedBy")
-  fuelTransactionsCreated      FuelTransaction[]        @relation("FuelTransactionCreatedBy")
-  fuelTransactionsUpdated      FuelTransaction[]        @relation("FuelTransactionUpdatedBy")
-  fuelTransactionsVoided       FuelTransaction[]        @relation("FuelTransactionVoidedBy")
-  expenseCategoriesCreated     ExpenseCategory[]        @relation("ExpenseCategoryCreatedBy")
-  expenseCategoriesUpdated     ExpenseCategory[]        @relation("ExpenseCategoryUpdatedBy")
-  expensesCreated              Expense[]                @relation("ExpenseCreatedBy")
-  expensesUpdated              Expense[]                @relation("ExpenseUpdatedBy")
-  expensesVoided               Expense[]                @relation("ExpenseVoidedBy")
-  fuelImportJobsCreated        FuelImportJob[]          @relation("FuelImportJobCreatedBy")
-  incidentsCreated             Incident[]               @relation("IncidentCreatedBy")
-  incidentsUpdated             Incident[]               @relation("IncidentUpdatedBy")
-  incidentStatusHistory        IncidentStatusHistory[]  @relation("IncidentStatusActor")
-  incidentNotesCreated         IncidentNote[]           @relation("IncidentNoteCreatedBy")
-  incidentAttachmentsCreated   IncidentAttachment[]     @relation("IncidentAttachmentCreatedBy")
-  notificationRecipients       NotificationRecipient[]
-  notificationPreferences      NotificationPreference[]
-  deviceAssignments            TelemetryDeviceVehicleAssignment[] @relation("DeviceAssignedBy")
+  id                            String                             @id @default(uuid()) @db.Uuid
+  email                         String                             @unique @db.VarChar(320)
+  displayName                   String                             @map("display_name") @db.VarChar(200)
+  status                        PrincipalStatus                    @default(ACTIVE)
+  version                       Int                                @default(1)
+  createdAt                     DateTime                           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                     DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  memberships                   OrganizationMembership[]
+  auditLogs                     AuditLog[]
+  vehicleStatusHistory          VehicleStatusHistory[]
+  driverStatusHistory           DriverStatusHistory[]
+  tripsCreated                  Trip[]                             @relation("TripCreatedBy")
+  tripsUpdated                  Trip[]                             @relation("TripUpdatedBy")
+  tripStatusHistory             TripStatusHistory[]
+  inspectionTemplatesCreated    InspectionTemplate[]               @relation("InspectionTemplateCreatedBy")
+  inspectionTemplatesUpdated    InspectionTemplate[]               @relation("InspectionTemplateUpdatedBy")
+  inspectionsCreated            Inspection[]                       @relation("InspectionCreatedBy")
+  inspectionsUpdated            Inspection[]                       @relation("InspectionUpdatedBy")
+  inspectionsPerformed          Inspection[]                       @relation("InspectionPerformedBy")
+  maintenanceRequestsCreated    MaintenanceRequest[]               @relation("MaintenanceRequestCreatedBy")
+  maintenanceRequestsUpdated    MaintenanceRequest[]               @relation("MaintenanceRequestUpdatedBy")
+  maintenancePlansCreated       MaintenancePlan[]                  @relation("MaintenancePlanCreatedBy")
+  maintenancePlansUpdated       MaintenancePlan[]                  @relation("MaintenancePlanUpdatedBy")
+  maintenanceVendorsCreated     MaintenanceVendor[]                @relation("MaintenanceVendorCreatedBy")
+  maintenanceVendorsUpdated     MaintenanceVendor[]                @relation("MaintenanceVendorUpdatedBy")
+  maintenanceWorkOrdersCreated  MaintenanceWorkOrder[]             @relation("MaintenanceWorkOrderCreatedBy")
+  maintenanceWorkOrdersUpdated  MaintenanceWorkOrder[]             @relation("MaintenanceWorkOrderUpdatedBy")
+  complianceDocTypesCreated     ComplianceDocumentType[]           @relation("ComplianceDocTypeCreatedBy")
+  complianceDocTypesUpdated     ComplianceDocumentType[]           @relation("ComplianceDocTypeUpdatedBy")
+  complianceDocsCreated         ComplianceDocument[]               @relation("ComplianceDocCreatedBy")
+  complianceDocsUpdated         ComplianceDocument[]               @relation("ComplianceDocUpdatedBy")
+  complianceDocsRevoked         ComplianceDocument[]               @relation("ComplianceDocRevokedBy")
+  fuelTransactionsCreated       FuelTransaction[]                  @relation("FuelTransactionCreatedBy")
+  fuelTransactionsUpdated       FuelTransaction[]                  @relation("FuelTransactionUpdatedBy")
+  fuelTransactionsVoided        FuelTransaction[]                  @relation("FuelTransactionVoidedBy")
+  expenseCategoriesCreated      ExpenseCategory[]                  @relation("ExpenseCategoryCreatedBy")
+  expenseCategoriesUpdated      ExpenseCategory[]                  @relation("ExpenseCategoryUpdatedBy")
+  expensesCreated               Expense[]                          @relation("ExpenseCreatedBy")
+  expensesUpdated               Expense[]                          @relation("ExpenseUpdatedBy")
+  expensesVoided                Expense[]                          @relation("ExpenseVoidedBy")
+  fuelImportJobsCreated         FuelImportJob[]                    @relation("FuelImportJobCreatedBy")
+  incidentsCreated              Incident[]                         @relation("IncidentCreatedBy")
+  incidentsUpdated              Incident[]                         @relation("IncidentUpdatedBy")
+  incidentStatusHistory         IncidentStatusHistory[]            @relation("IncidentStatusActor")
+  incidentNotesCreated          IncidentNote[]                     @relation("IncidentNoteCreatedBy")
+  incidentAttachmentsCreated    IncidentAttachment[]               @relation("IncidentAttachmentCreatedBy")
+  notificationRecipients        NotificationRecipient[]
+  notificationPreferences       NotificationPreference[]
+  deviceAssignments             TelemetryDeviceVehicleAssignment[] @relation("DeviceAssignedBy")
+  revokedDeviceCredentials      TelemetryDeviceCredential[]        @relation("DeviceCredentialRevokedBy")
+  integrationConnectionsCreated IntegrationConnection[]            @relation("IntegrationConnectionCreatedBy")
+  integrationConnectionsUpdated IntegrationConnection[]            @relation("IntegrationConnectionUpdatedBy")
+  integrationSecretsRevoked     IntegrationSecret[]                @relation("IntegrationSecretRevokedBy")
+  fuelCardBatchesConfirmed      FuelCardImportBatch[]              @relation("FuelCardBatchConfirmedBy")
+  accountingExportsCreated      AccountingExportLog[]              @relation("AccountingExportActor")
 
   @@map("users")
 }
@@ -278,35 +295,35 @@ model OutboxEvent {
 }
 
 model Vehicle {
-  id                    String                       @id @default(uuid()) @db.Uuid
-  organizationId        String                       @map("organization_id") @db.Uuid
-  displayId             String                       @map("display_id") @db.VarChar(40)
-  registration          String                       @db.VarChar(30)
-  vin                   String                       @unique @db.VarChar(17)
-  type                  VehicleType
-  fuelType              FuelType                     @map("fuel_type")
-  model                 String                       @db.VarChar(100)
-  year                  Int
-  odometerKm            Int                          @map("odometer_km")
-  status                VehicleStatus                @default(DRAFT)
-  notes                 String?                      @db.VarChar(500)
-  version               Int                          @default(1)
-  createdAt             DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization          Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  statusHistory         VehicleStatusHistory[]
-  assignments           VehicleDriverAssignment[]
-  trips                 Trip[]
-  inspections           Inspection[]
-  maintenanceRequests   MaintenanceRequest[]
-  maintenanceSchedules  VehicleMaintenanceSchedule[]
-  maintenanceWorkOrders MaintenanceWorkOrder[]
-  complianceDocuments   ComplianceDocument[]
-  fuelTransactions      FuelTransaction[]
-  expenses              Expense[]
-  incidents             Incident[]
-  telemetryAssignments  TelemetryDeviceVehicleAssignment[]
-  telemetryPositions    TelemetryPosition[]
+  id                       String                             @id @default(uuid()) @db.Uuid
+  organizationId           String                             @map("organization_id") @db.Uuid
+  displayId                String                             @map("display_id") @db.VarChar(40)
+  registration             String                             @db.VarChar(30)
+  vin                      String                             @unique @db.VarChar(17)
+  type                     VehicleType
+  fuelType                 FuelType                           @map("fuel_type")
+  model                    String                             @db.VarChar(100)
+  year                     Int
+  odometerKm               Int                                @map("odometer_km")
+  status                   VehicleStatus                      @default(DRAFT)
+  notes                    String?                            @db.VarChar(500)
+  version                  Int                                @default(1)
+  createdAt                DateTime                           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization             Organization                       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  statusHistory            VehicleStatusHistory[]
+  assignments              VehicleDriverAssignment[]
+  trips                    Trip[]
+  inspections              Inspection[]
+  maintenanceRequests      MaintenanceRequest[]
+  maintenanceSchedules     VehicleMaintenanceSchedule[]
+  maintenanceWorkOrders    MaintenanceWorkOrder[]
+  complianceDocuments      ComplianceDocument[]
+  fuelTransactions         FuelTransaction[]
+  expenses                 Expense[]
+  incidents                Incident[]
+  telemetryAssignments     TelemetryDeviceVehicleAssignment[]
+  telemetryPositions       TelemetryPosition[]
   telemetryCurrentPosition TelemetryCurrentPosition?
 
   @@unique([organizationId, displayId])
@@ -491,17 +508,17 @@ model Trip {
   updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
   updatedBy       String     @map("updated_by") @db.Uuid
 
-  organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  assignment       VehicleDriverAssignment @relation(fields: [assignmentId, organizationId, vehicleId, driverId], references: [id, organizationId, vehicleId, driverId], onDelete: Restrict)
-  vehicle          Vehicle                 @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  driver           Driver                  @relation(fields: [driverId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  createdByUser    User                    @relation("TripCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
-  updatedByUser    User                    @relation("TripUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
-  statusHistory    TripStatusHistory[]
-  inspections      Inspection[]
-  fuelTransactions FuelTransaction[]
-  expenses         Expense[]
-  incidents        Incident[]
+  organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  assignment         VehicleDriverAssignment @relation(fields: [assignmentId, organizationId, vehicleId, driverId], references: [id, organizationId, vehicleId, driverId], onDelete: Restrict)
+  vehicle            Vehicle                 @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  driver             Driver                  @relation(fields: [driverId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdByUser      User                    @relation("TripCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser      User                    @relation("TripUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  statusHistory      TripStatusHistory[]
+  inspections        Inspection[]
+  fuelTransactions   FuelTransaction[]
+  expenses           Expense[]
+  incidents          Incident[]
   telemetryPositions TelemetryPosition[]
 
   @@unique([organizationId, displayId])
@@ -512,6 +529,9 @@ model Trip {
   @@index([organizationId, driverId])
   @@index([organizationId, assignmentId])
   @@index([organizationId, createdAt])
+  @@index([organizationId, actualStartAt])
+  @@index([organizationId, vehicleId, actualStartAt])
+  @@index([organizationId, driverId, actualStartAt])
   @@map("trips")
 }
 
@@ -1072,6 +1092,7 @@ enum FuelQuantityUnit {
 enum FuelTransactionSource {
   MANUAL
   CSV_IMPORT
+  FUEL_CARD_IMPORT
 }
 
 enum FuelTransactionStatus {
@@ -1145,14 +1166,15 @@ model FuelTransaction {
   updatedAt          DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
   updatedBy          String                @map("updated_by") @db.Uuid
 
-  organization  Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  vehicle       Vehicle                  @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  driver        Driver?                  @relation(fields: [driverId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  trip          Trip?                    @relation(fields: [tripId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  createdByUser User                     @relation("FuelTransactionCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
-  updatedByUser User                     @relation("FuelTransactionUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
-  voidedByUser  User?                    @relation("FuelTransactionVoidedBy", fields: [voidedBy], references: [id], onDelete: Restrict)
-  anomalies     FuelTransactionAnomaly[]
+  organization         Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  vehicle              Vehicle                       @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  driver               Driver?                       @relation(fields: [driverId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  trip                 Trip?                         @relation(fields: [tripId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  createdByUser        User                          @relation("FuelTransactionCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser        User                          @relation("FuelTransactionUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+  voidedByUser         User?                         @relation("FuelTransactionVoidedBy", fields: [voidedBy], references: [id], onDelete: Restrict)
+  anomalies            FuelTransactionAnomaly[]
+  externalTransactions ExternalTransactionIdentity[]
 
   @@unique([organizationId, displayId])
   @@unique([id, organizationId])
@@ -1595,12 +1617,19 @@ enum TelemetrySource {
   MOBILE
   IMPORT
   SIMULATOR
+  WEBHOOK
 }
 
 enum TelemetryPositionStatus {
   VALID
   STALE
   INVALID
+  OUT_OF_ORDER
+}
+
+enum TelemetryDeviceCredentialStatus {
+  ACTIVE
+  REVOKED
 }
 
 enum TelemetryDeviceStatus {
@@ -1610,20 +1639,23 @@ enum TelemetryDeviceStatus {
 }
 
 model TelemetryDevice {
-  id                 String                             @id @default(uuid()) @db.Uuid
-  organizationId     String                             @map("organization_id") @db.Uuid
-  displayId          String                             @map("display_id") @db.VarChar(40)
-  name               String                             @db.VarChar(200)
-  identifier         String                             @db.VarChar(100)
-  status             TelemetryDeviceStatus              @default(ACTIVE)
-  notes              String?                            @db.VarChar(500)
-  metadata           Json?
-  version            Int                                @default(1)
-  createdAt          DateTime                           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization       Organization                       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  vehicleAssignments TelemetryDeviceVehicleAssignment[]
-  positions          TelemetryPosition[]
+  id                  String                             @id @default(uuid()) @db.Uuid
+  organizationId      String                             @map("organization_id") @db.Uuid
+  displayId           String                             @map("display_id") @db.VarChar(40)
+  name                String                             @db.VarChar(200)
+  identifier          String                             @db.VarChar(100)
+  status              TelemetryDeviceStatus              @default(ACTIVE)
+  notes               String?                            @db.VarChar(500)
+  metadata            Json?
+  version             Int                                @default(1)
+  createdAt           DateTime                           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization        Organization                       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  vehicleAssignments  TelemetryDeviceVehicleAssignment[]
+  positions           TelemetryPosition[]
+  currentPositions    TelemetryCurrentPosition[]
+  credentials         TelemetryDeviceCredential[]
+  integrationMappings IntegrationDeviceMapping[]
 
   @@unique([organizationId, displayId])
   @@unique([organizationId, identifier])
@@ -1656,7 +1688,7 @@ model TelemetryDeviceVehicleAssignment {
 model TelemetryPosition {
   id                String                    @id @default(uuid()) @db.Uuid
   organizationId    String                    @map("organization_id") @db.Uuid
-  deviceId          String                    @map("device_id") @db.Uuid
+  deviceId          String?                   @map("device_id") @db.Uuid
   vehicleId         String                    @map("vehicle_id") @db.Uuid
   tripId            String?                   @map("trip_id") @db.Uuid
   capturedAt        DateTime                  @map("captured_at") @db.Timestamptz(3)
@@ -1674,12 +1706,12 @@ model TelemetryPosition {
   providerMessageId String?                   @map("provider_message_id") @db.VarChar(200)
   rawMetadata       Json?                     @map("raw_metadata")
   organization      Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  device            TelemetryDevice           @relation(fields: [deviceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  device            TelemetryDevice?          @relation(fields: [deviceId, organizationId], references: [id, organizationId], onDelete: Restrict)
   vehicle           Vehicle                   @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
   trip              Trip?                     @relation(fields: [tripId, organizationId], references: [id, organizationId], onDelete: Restrict)
   currentPosition   TelemetryCurrentPosition?
 
-  @@unique([organizationId, deviceId, providerMessageId], map: "unique_telemetry_provider_msg")
+  @@unique([id, organizationId, vehicleId])
   @@index([organizationId, vehicleId, capturedAt(sort: Desc)])
   @@index([organizationId, deviceId, capturedAt(sort: Desc)])
   @@index([organizationId, tripId, capturedAt])
@@ -1690,7 +1722,7 @@ model TelemetryPosition {
 model TelemetryCurrentPosition {
   organizationId String                  @map("organization_id") @db.Uuid
   vehicleId      String                  @map("vehicle_id") @db.Uuid
-  deviceId       String                  @map("device_id") @db.Uuid
+  deviceId       String?                 @map("device_id") @db.Uuid
   positionId     String                  @unique @map("position_id") @db.Uuid
   latitude       Decimal                 @db.Decimal(9, 6)
   longitude      Decimal                 @db.Decimal(9, 6)
@@ -1705,9 +1737,295 @@ model TelemetryCurrentPosition {
   updatedAt      DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   vehicle        Vehicle                 @relation(fields: [vehicleId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  position       TelemetryPosition       @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  position       TelemetryPosition       @relation(fields: [positionId, organizationId, vehicleId], references: [id, organizationId, vehicleId], onDelete: Cascade)
+  device         TelemetryDevice?        @relation(fields: [deviceId, organizationId], references: [id, organizationId], onDelete: Restrict)
 
   @@id([organizationId, vehicleId])
   @@unique([vehicleId, organizationId])
+  @@unique([positionId, organizationId, vehicleId], map: "telemetry_current_positions_position_id_org_veh_key")
   @@map("telemetry_current_positions")
+}
+
+model TelemetryDeviceCredential {
+  id             String                          @id @default(uuid()) @db.Uuid
+  organizationId String                          @map("organization_id") @db.Uuid
+  deviceId       String                          @map("device_id") @db.Uuid
+  keyPrefix      String                          @unique @map("key_prefix") @db.VarChar(16)
+  secretHash     String                          @map("secret_hash") @db.VarChar(255)
+  status         TelemetryDeviceCredentialStatus @default(ACTIVE)
+  createdAt      DateTime                        @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt     DateTime?                       @map("last_used_at") @db.Timestamptz(3)
+  revokedAt      DateTime?                       @map("revoked_at") @db.Timestamptz(3)
+  revokedBy      String?                         @map("revoked_by") @db.Uuid
+
+  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  device        TelemetryDevice @relation(fields: [deviceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  revokedByUser User?           @relation("DeviceCredentialRevokedBy", fields: [revokedBy], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, deviceId])
+  @@map("telemetry_device_credentials")
+}
+
+// -------------------------------------------------------------
+// Milestone 14: External Integrations Vertical Slice
+// -------------------------------------------------------------
+
+enum IntegrationKind {
+  OUTBOUND_WEBHOOK
+  INBOUND_TELEMATICS
+  FUEL_CARD_IMPORT
+  ACCOUNTING_EXPORT
+}
+
+enum IntegrationStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  RETRYING
+  EXHAUSTED
+  FAILED
+}
+
+enum IntegrationMappingStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum FuelCardImportBatchStatus {
+  PREVIEWED
+  CONFIRMED
+  FAILED
+}
+
+model IntegrationConnection {
+  id                       String            @id @default(uuid()) @db.Uuid
+  organizationId           String            @map("organization_id") @db.Uuid
+  displayId                String            @map("display_id") @db.VarChar(40)
+  name                     String            @db.VarChar(200)
+  kind                     IntegrationKind
+  provider                 String            @db.VarChar(100)
+  status                   IntegrationStatus @default(DRAFT)
+  configuration            Json              @default("{}")
+  createdBy                String            @map("created_by") @db.Uuid
+  updatedBy                String?           @map("updated_by") @db.Uuid
+  version                  Int               @default(1)
+  createdAt                DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  disabledAt               DateTime?         @map("disabled_at") @db.Timestamptz(3)
+  lastSuccessfulActivityAt DateTime?         @map("last_successful_activity_at") @db.Timestamptz(3)
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdByUser User         @relation("IntegrationConnectionCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updatedByUser User?        @relation("IntegrationConnectionUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+
+  secrets              IntegrationSecret[]
+  subscriptions        WebhookSubscription[]
+  deviceMappings       IntegrationDeviceMapping[]
+  inboundReceipts      InboundIntegrationReceipt[]
+  fuelCardBatches      FuelCardImportBatch[]
+  externalTransactions ExternalTransactionIdentity[]
+  accountingExports    AccountingExportLog[]
+
+  @@unique([organizationId, displayId])
+  @@unique([id, organizationId])
+  @@index([organizationId, kind, status])
+  @@index([organizationId, createdAt])
+  @@map("integration_connections")
+}
+
+model IntegrationSecret {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  connectionId    String    @map("connection_id") @db.Uuid
+  keyVersion      Int       @default(1) @map("key_version")
+  encryptedSecret String    @map("encrypted_secret") @db.Text
+  secretHash      String    @map("secret_hash") @db.VarChar(128)
+  status          String    @default("ACTIVE") @db.VarChar(32)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedBy       String?   @map("revoked_by") @db.Uuid
+
+  organization  Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connection    IntegrationConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  revokedByUser User?                 @relation("IntegrationSecretRevokedBy", fields: [revokedBy], references: [id], onDelete: Restrict)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, connectionId, status])
+  @@map("integration_secrets")
+}
+
+model WebhookSubscription {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  connectionId    String   @map("connection_id") @db.Uuid
+  endpointUrl     String   @map("endpoint_url") @db.VarChar(2048)
+  status          String   @default("ACTIVE") @db.VarChar(32)
+  eventTypes      String[] @map("event_types")
+  secretReference String?  @map("secret_reference") @db.Uuid
+  version         Int      @default(1)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connection   IntegrationConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  deliveries   WebhookDelivery[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, connectionId])
+  @@index([organizationId, status])
+  @@map("webhook_subscriptions")
+}
+
+model WebhookDelivery {
+  id             String                @id @default(uuid()) @db.Uuid
+  organizationId String                @map("organization_id") @db.Uuid
+  subscriptionId String                @map("subscription_id") @db.Uuid
+  sourceEventId  String                @map("source_event_id") @db.Uuid
+  eventType      String                @map("event_type") @db.VarChar(150)
+  deliveryStatus WebhookDeliveryStatus @default(PENDING) @map("delivery_status")
+  attempts       Int                   @default(0)
+  nextAttemptAt  DateTime?             @map("next_attempt_at") @db.Timestamptz(3)
+  deliveredAt    DateTime?             @map("delivered_at") @db.Timestamptz(3)
+  lastHttpStatus Int?                  @map("last_http_status")
+  lastErrorCode  String?               @map("last_error_code") @db.VarChar(100)
+  payload        Json
+  lockedUntil    DateTime?             @map("locked_until") @db.Timestamptz(3)
+  lockedBy       String?               @map("locked_by") @db.VarChar(100)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  subscription WebhookSubscription      @relation(fields: [subscriptionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  attemptsList WebhookDeliveryAttempt[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, subscriptionId, sourceEventId])
+  @@index([organizationId, deliveryStatus, nextAttemptAt])
+  @@index([organizationId, createdAt])
+  @@map("webhook_deliveries")
+}
+
+model WebhookDeliveryAttempt {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  deliveryId      String   @map("delivery_id") @db.Uuid
+  attemptNumber   Int      @map("attempt_number")
+  httpStatus      Int?     @map("http_status")
+  durationMs      Int      @map("duration_ms")
+  errorCode       String?  @map("error_code") @db.VarChar(100)
+  responseExcerpt String?  @map("response_excerpt") @db.VarChar(500)
+  attemptedAt     DateTime @default(now()) @map("attempted_at") @db.Timestamptz(3)
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  delivery     WebhookDelivery @relation(fields: [deliveryId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, deliveryId])
+  @@map("webhook_delivery_attempts")
+}
+
+model InboundIntegrationReceipt {
+  id                      String   @id @default(uuid()) @db.Uuid
+  organizationId          String   @map("organization_id") @db.Uuid
+  connectionId            String   @map("connection_id") @db.Uuid
+  externalEventId         String   @map("external_event_id") @db.VarChar(200)
+  payloadHash             String   @map("payload_hash") @db.VarChar(128)
+  status                  String   @default("PROCESSED") @db.VarChar(32)
+  processedPositionsCount Int      @default(0) @map("processed_positions_count")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connection   IntegrationConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, connectionId, externalEventId])
+  @@index([organizationId, connectionId, createdAt])
+  @@map("inbound_integration_receipts")
+}
+
+model IntegrationDeviceMapping {
+  id                String                   @id @default(uuid()) @db.Uuid
+  organizationId    String                   @map("organization_id") @db.Uuid
+  connectionId      String                   @map("connection_id") @db.Uuid
+  providerDeviceId  String                   @map("provider_device_id") @db.VarChar(150)
+  telemetryDeviceId String                   @map("telemetry_device_id") @db.Uuid
+  status            IntegrationMappingStatus @default(ACTIVE)
+  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connection      IntegrationConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  telemetryDevice TelemetryDevice       @relation(fields: [telemetryDeviceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, connectionId, providerDeviceId])
+  @@index([organizationId, telemetryDeviceId])
+  @@map("integration_device_mappings")
+}
+
+model FuelCardImportBatch {
+  id             String                    @id @default(uuid()) @db.Uuid
+  organizationId String                    @map("organization_id") @db.Uuid
+  connectionId   String                    @map("connection_id") @db.Uuid
+  status         FuelCardImportBatchStatus @default(PREVIEWED)
+  fileName       String                    @map("file_name") @db.VarChar(255)
+  totalRows      Int                       @map("total_rows")
+  validRows      Int                       @map("valid_rows")
+  importedRows   Int                       @default(0) @map("imported_rows")
+  errorSummary   Json?                     @map("error_summary")
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  confirmedAt    DateTime?                 @map("confirmed_at") @db.Timestamptz(3)
+  confirmedBy    String?                   @map("confirmed_by") @db.Uuid
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connection      IntegrationConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  confirmedByUser User?                 @relation("FuelCardBatchConfirmedBy", fields: [confirmedBy], references: [id], onDelete: Restrict)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, connectionId, createdAt])
+  @@map("fuel_card_import_batches")
+}
+
+model ExternalTransactionIdentity {
+  id                    String   @id @default(uuid()) @db.Uuid
+  organizationId        String   @map("organization_id") @db.Uuid
+  connectionId          String   @map("connection_id") @db.Uuid
+  externalTransactionId String   @map("external_transaction_id") @db.VarChar(200)
+  fuelTransactionId     String   @map("fuel_transaction_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connection      IntegrationConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  fuelTransaction FuelTransaction       @relation(fields: [fuelTransactionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, connectionId, externalTransactionId])
+  @@index([organizationId, fuelTransactionId])
+  @@map("external_transaction_identities")
+}
+
+model AccountingExportLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  connectionId   String   @map("connection_id") @db.Uuid
+  actorId        String   @map("actor_id") @db.Uuid
+  format         String   @default("CSV") @db.VarChar(20)
+  fromUtc        DateTime @map("from_utc") @db.Timestamptz(3)
+  toUtc          DateTime @map("to_utc") @db.Timestamptz(3)
+  rowCount       Int      @map("row_count")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connection   IntegrationConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  actor        User                  @relation("AccountingExportActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, connectionId, createdAt])
+  @@map("accounting_export_logs")
 }

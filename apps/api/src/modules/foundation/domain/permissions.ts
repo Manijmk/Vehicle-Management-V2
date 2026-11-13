@@ -86,6 +86,15 @@ export const permissionCodes = [
   'telemetry.device.read',
   'telemetry.device.manage',
   'telemetry.ingest',
+  'report.read',
+  'report.export',
+  'integration.read',
+  'integration.manage',
+  'integration.secret.manage',
+  'integration.webhook.retry',
+  'integration.telematics.map',
+  'integration.fuel-card.import',
+  'integration.accounting.export',
 ] as const;
 
 export type PermissionCode = (typeof permissionCodes)[number];

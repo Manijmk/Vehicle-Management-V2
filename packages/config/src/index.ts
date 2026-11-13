@@ -37,6 +37,10 @@ const apiSchema = runtimeSchema.and(infrastructureSchema).and(
     AUTH_ISSUER: z.string().trim().min(1).default('vehicle-management-local'),
     AUTH_AUDIENCE: z.string().trim().min(1).default('vehicle-management-api'),
     AUTH_LOCAL_SIGNING_KEY: z.string().min(32),
+    INTEGRATION_MASTER_KEY: z
+      .string()
+      .min(32)
+      .default('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
   }),
 );
 
@@ -45,6 +49,13 @@ const workerSchema = runtimeSchema.and(infrastructureSchema).and(
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(1000),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().max(100).default(20),
     OUTBOX_LOCK_TIMEOUT_MS: z.coerce.number().int().min(1000).default(60000),
+    WEBHOOK_DELIVERY_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(1000),
+    WEBHOOK_DELIVERY_BATCH_SIZE: z.coerce.number().int().positive().max(100).default(20),
+    WEBHOOK_DELIVERY_LOCK_TIMEOUT_MS: z.coerce.number().int().min(1000).default(60000),
+    INTEGRATION_MASTER_KEY: z
+      .string()
+      .min(32)
+      .default('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
   }),
 );
 

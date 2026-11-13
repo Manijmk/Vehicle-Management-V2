@@ -102,6 +102,15 @@ export const permissionDefinitions = [
   ['telemetry.device.read', 'Read telemetry devices'],
   ['telemetry.device.manage', 'Create and manage telemetry devices and assignments'],
   ['telemetry.ingest', 'Ingest telemetry positions'],
+  ['report.read', 'Read operational reports and analytics'],
+  ['report.export', 'Export operational reports to CSV and PDF'],
+  ['integration.read', 'Read integration connections and status'],
+  ['integration.manage', 'Create and manage integration connections'],
+  ['integration.secret.manage', 'Manage integration signing secrets and credentials'],
+  ['integration.webhook.retry', 'Manually retry webhook deliveries'],
+  ['integration.telematics.map', 'Manage provider device mappings for telematics'],
+  ['integration.fuel-card.import', 'Preview and confirm fuel card CSV imports'],
+  ['integration.accounting.export', 'Export financial accounting CSV data'],
 ] as const;
 
 async function seed(): Promise<void> {
@@ -232,6 +241,8 @@ async function seed(): Promise<void> {
       'notification.template.read',
       'telemetry.read',
       'telemetry.device.read',
+      'report.read',
+      'integration.read',
     ];
     await database.rolePermission.createMany({
       data: viewerCodes.map((code) => ({
