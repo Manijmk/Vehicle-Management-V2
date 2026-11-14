@@ -1,4 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Auto-load root .env into process.env if present
+const rootEnv = path.resolve(__dirname, '../../.env');
+if (fs.existsSync(rootEnv)) {
+  process.loadEnvFile(rootEnv);
+}
 
 export default defineConfig({
   testDir: './e2e',
@@ -23,6 +35,11 @@ export default defineConfig({
       url: 'http://localhost:3001/api/v1/health',
       reuseExistingServer: true,
       timeout: 120_000,
+      env: {
+        DATABASE_URL:
+          process.env.DATABASE_URL ??
+          'postgresql://vehicle_management:local_vehicle_management@127.0.0.1:5432/vehicle_management?schema=public',
+      },
     },
     {
       command: 'pnpm start',

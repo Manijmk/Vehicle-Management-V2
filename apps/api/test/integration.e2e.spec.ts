@@ -18,7 +18,7 @@ import {
   VehicleStatus,
   VehicleType,
 } from '@vms/database';
-import type { PrismaClient } from '@vms/database';
+import type { Prisma, PrismaClient } from '@vms/database';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 

@@ -4,10 +4,7 @@ import type { OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/comm
 import type { PrismaClient, WebhookDeliveryStatus } from '@vms/database';
 import type { WorkerConfig } from '@vms/config';
 import { WORKER_CONFIG, WORKER_DATABASE } from '../outbox/tokens.js';
-import {
-  InvalidWebhookUrlError,
-  sendSafeWebhookHttpRequest,
-} from './url-validator.js';
+import { InvalidWebhookUrlError, sendSafeWebhookHttpRequest } from './url-validator.js';
 
 const BACKOFF_SCHEDULE_SECONDS = [10, 30, 120, 600, 1800]; // 10s, 30s, 2m, 10m, 30m
 

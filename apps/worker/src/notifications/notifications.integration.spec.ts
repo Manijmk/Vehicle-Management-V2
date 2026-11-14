@@ -93,7 +93,9 @@ describe('Worker Notifications & Automation Integration', () => {
   afterAll(async () => {
     if (!database) return;
     try {
-      await database.notificationDeliveryAttempt.deleteMany({ where: { organizationId: testOrgId } });
+      await database.notificationDeliveryAttempt.deleteMany({
+        where: { organizationId: testOrgId },
+      });
       await database.notificationRecipient.deleteMany({ where: { organizationId: testOrgId } });
       await database.notification.deleteMany({ where: { organizationId: testOrgId } });
       await database.notificationPreference.deleteMany({ where: { organizationId: testOrgId } });
